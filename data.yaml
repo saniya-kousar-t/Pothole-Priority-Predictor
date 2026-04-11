@@ -1,0 +1,6 @@
+names:
+- Pothole
+nc: 1
+test: C:\Users\Dell\Desktop\test\images
+train: C:\Users\Dell\Desktop\train\images
+val: C:\Users\Dell\Desktop\valid\images
