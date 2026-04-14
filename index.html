@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pothole Priority Predictor</title>
+  <style>
+    /* ── Reset & base ── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px;
+    }
+
+    /* ── Page header ── */
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    header h1 {
+      font-size: 26px;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+    header p {
+      margin-top: 6px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    /* ── Main card ── */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+      padding: 32px;
+      width: 100%;
+      max-width: 620px;
+    }
+
+    /* ── Upload area ── */
+    .upload-area {
+      border: 2px dashed #aab;
+      border-radius: 8px;
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-area:hover {
+      border-color: #4a90e2;
+      background: #f0f6ff;
+    }
+    .upload-area p {
+      font-size: 14px;
+      color: #888;
+      margin-top: 8px;
+    }
+
+    /* Hidden real file input */
+    #fileInput { display: none; }
+
+    /* ── Preview canvas wrapper ── */
+    #previewWrapper {
+      display: none;           /* hidden until an image is chosen */
+      margin-top: 24px;
+      position: relative;
+    }
+
+    /* The canvas sits directly on top of the image */
+    #previewImg {
+      display: block;
+      width: 100%;
+      border-radius: 8px;
+    }
+    #boxCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 8px;
+      pointer-events: none;   /* let clicks pass through to the image below */
+    }
+
+    /* ── Predict button ── */
+    #predictBtn {
+      display: none;           /* hidden until image is loaded */
+      margin-top: 20px;
+      width: 100%;
+      padding: 12px;
+      background: #4a90e2;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #predictBtn:hover  { background: #357abd; }
+    #predictBtn:active { background: #2a6099; }
+    #predictBtn:disabled {
+      background: #aac5e8;
+      cursor: not-allowed;
+    }
+
+    /* ── Status / loading message ── */
+    #statusMsg {
+      display: none;
+      margin-top: 16px;
+      font-size: 14px;
+      text-align: center;
+      padding: 10px;
+      border-radius: 6px;
+    }
+    #statusMsg.loading {
+      background: #fff8e1;
+      color: #856404;
+    }
+    #statusMsg.error {
+      background: #fdecea;
+      color: #c62828;
+    }
+    #statusMsg.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    /* ── Detection results list ── */
+    #resultsList {
+      display: none;
+      margin-top: 20px;
+      border-top: 1px solid #eee;
+      padding-top: 16px;
+    }
+    #resultsList h3 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #888;
+      margin-bottom: 10px;
+    }
+    .detection-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: #f7f9fc;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .detection-item .label { font-weight: 600; color: #333; }
+    .detection-item .score {
+      background: #e3f0ff;
+      color: #1a5fa8;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    footer {
+      margin-top: 32px;
+      font-size: 12px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── Page header ─── -->
+  <header>
+    <h1>🛣️ Pothole Priority Predictor</h1>
+    <p>Upload a road image to detect potholes and their severity</p>
+  </header>
+
+  <!-- ─── Main card ─── -->
+  <div class="card">
+
+    <!-- Upload trigger (clicking this opens the file dialog) -->
+    <div class="upload-area" id="uploadArea">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+           stroke="#aab" stroke-width="1.5" stroke-linecap="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <p>Click to upload a road image</p>
+      <p style="font-size:12px; margin-top:4px;">JPG, PNG, WEBP supported</p>
+    </div>
+
+    <!-- The real hidden file input -->
+    <input type="file" id="fileInput" accept="image/*" />
+
+    <!-- Image preview + bounding box canvas, stacked with position:relative -->
+    <div id="previewWrapper">
+      <img id="previewImg" alt="Road preview" />
+      <canvas id="boxCanvas"></canvas>
+    </div>
+
+    <!-- Predict button (shown after image chosen) -->
+    <button id="predictBtn">Analyse Image</button>
+
+    <!-- Loading / error / success message -->
+    <div id="statusMsg"></div>
+
+    <!-- List of detections returned by the API -->
+    <div id="resultsList">
+      <h3>Detections</h3>
+      <div id="detectionsContainer"></div>
+    </div>
+
+  </div><!-- /.card -->
+
+  <footer>Proof-of-concept demo · backend at localhost:5000</footer>
+
+  <!-- ─────────────────────────────────────────────────────────
+       JAVASCRIPT
+       ───────────────────────────────────────────────────────── -->
+  <script>
+    // ── 1. Grab references to DOM elements ──────────────────
+    const uploadArea        = document.getElementById('uploadArea');
+    const fileInput         = document.getElementById('fileInput');
+    const previewWrapper    = document.getElementById('previewWrapper');
+    const previewImg        = document.getElementById('previewImg');
+    const boxCanvas         = document.getElementById('boxCanvas');
+    const predictBtn        = document.getElementById('predictBtn');
+    const statusMsg         = document.getElementById('statusMsg');
+    const resultsList       = document.getElementById('resultsList');
+    const detectionsContainer = document.getElementById('detectionsContainer');
+
+    // We'll store the selected file here so we can send it later
+    let selectedFile = null;
+
+    // ── 2. Click on the upload area → open file picker ──────
+    uploadArea.addEventListener('click', () => fileInput.click());
+
+    // ── 3. User selects a file ───────────────────────────────
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;           // user cancelled — do nothing
+
+      selectedFile = file;
+
+      // Show a local preview using a FileReader (no server needed yet)
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewImg.src = e.target.result;
+
+        // Once the image has fully loaded we know its dimensions
+        previewImg.onload = () => {
+          // Size the canvas to match the rendered image
+          resizeCanvas();
+
+          // Clear any old boxes / results from a previous run
+          clearResults();
+
+          // Show the preview section and the predict button
+          previewWrapper.style.display = 'block';
+          predictBtn.style.display     = 'block';
+        };
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // ── 4. Resize canvas to match the displayed image size ───
+    //   (the image width is 100% of the card, so it can vary)
+    function resizeCanvas() {
+      boxCanvas.width  = previewImg.offsetWidth;
+      boxCanvas.height = previewImg.offsetHeight;
+    }
+
+    // Keep the canvas correctly sized if the user resizes the window
+    window.addEventListener('resize', () => {
+      if (previewWrapper.style.display === 'block') {
+        resizeCanvas();
+        // Boxes are not re-drawn on resize in this simple demo —
+        // user can click Analyse again to refresh them.
+      }
+    });
+
+    // ── 5. Predict button click → call the backend ──────────
+    predictBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      // Disable the button so the user can't click it twice
+      predictBtn.disabled = true;
+      showStatus('loading', '⏳  Analysing image, please wait…');
+      clearResults();
+
+      try {
+        // -- 5a. Build a FormData payload with the image file --
+        const formData = new FormData();
+        // The key "image" must match what your Flask backend expects
+        formData.append('image', selectedFile);
+
+        // -- 5b. POST to the backend --
+        const response = await fetch('http://localhost:5000/predict', {
+          method: 'POST',
+          body: formData,
+          // Do NOT set Content-Type manually — the browser sets
+          // it automatically with the correct multipart boundary
+        });
+
+        // -- 5c. Check if the server returned an HTTP error --
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+
+        // -- 5d. Parse the JSON response --
+        const data = await response.json();
+        /*
+          Actual Flask response:
+          {
+            "success": true,
+            "count": 2,
+            "inference_time_ms": 42.3,
+            "predictions": [
+              { "label": "pothole", "confidence": 0.91,
+                "bbox": { "x1":10, "y1":20, "x2":200, "y2":300, "width":190, "height":280 } }
+            ]
+          }
+        */
+
+        // Check backend success flag
+        if (!data.success) {
+          throw new Error(data.error || 'Backend returned an error');
+        }
+
+        // Convert Flask format to arrays that drawBoxes() expects
+        const predictions = data.predictions || [];
+        const boxes  = predictions.map(p => [p.bbox.x1, p.bbox.y1, p.bbox.x2, p.bbox.y2]);
+        const labels = predictions.map(p => p.label);
+        const scores = predictions.map(p => p.confidence);
+
+        const timeLabel = data.inference_time_ms ? ` (${data.inference_time_ms}ms)` : '';
+
+        // -- 5e. Draw boxes and show the results list --
+        const count = boxes.length;
+
+        if (count === 0) {
+          showStatus('success', '✅  No potholes detected.');
+        } else {
+          showStatus('success', `✅  ${count} pothole${count > 1 ? 's' : ''} detected${timeLabel}`);
+          drawBoxes(boxes, labels, scores);
+          showDetectionList(boxes, labels, scores);
+        }
+
+      } catch (err) {
+        // Network failure, CORS error, JSON parse error, etc.
+        console.error(err);
+        showStatus('error',
+          '❌  Could not reach the backend. Is the server running on localhost:5000?<br>' +
+          '<small>' + err.message + '</small>'
+        );
+      } finally {
+        // Re-enable the button whether we succeeded or failed
+        predictBtn.disabled = false;
+      }
+    });
+
+    // ── 6. Draw bounding boxes on the canvas ────────────────
+    //
+    //   The model returns coordinates in the original image space
+    //   (i.e. based on the actual pixel dimensions of the uploaded photo).
+    //   The preview image is displayed at a different (CSS) size, so we
+    //   must scale the coordinates before drawing them on the canvas.
+    //
+    function drawBoxes(boxes, labels, scores) {
+      const ctx = boxCanvas.getContext('2d');
+      ctx.clearRect(0, 0, boxCanvas.width, boxCanvas.height);
+
+      // How much has the image been scaled down (or up) for display?
+      const scaleX = boxCanvas.width  / previewImg.naturalWidth;
+      const scaleY = boxCanvas.height / previewImg.naturalHeight;
+
+      boxes.forEach((box, i) => {
+        const [x1, y1, x2, y2] = box;
+
+        // Scale coordinates to the canvas size
+        const sx1 = x1 * scaleX;
+        const sy1 = y1 * scaleY;
+        const sw  = (x2 - x1) * scaleX;
+        const sh  = (y2 - y1) * scaleY;
+
+        // -- Draw the rectangle outline --
+        ctx.strokeStyle = '#FF3B30';   // red box
+        ctx.lineWidth   = 2.5;
+        ctx.strokeRect(sx1, sy1, sw, sh);
+
+        // -- Draw a semi-transparent fill so the box stands out --
+        ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
+        ctx.fillRect(sx1, sy1, sw, sh);
+
+        // -- Draw a label tag above the box --
+        const label    = labels[i] || 'pothole';
+        const score    = scores[i] != null ? (scores[i] * 100).toFixed(1) + '%' : '';
+        const tagText  = `${label}  ${score}`;
+        const fontSize = 12;
+
+        ctx.font         = `bold ${fontSize}px Arial`;
+        ctx.textBaseline = 'bottom';
+
+        const textWidth  = ctx.measureText(tagText).width;
+        const tagPadding = 4;
+        const tagHeight  = fontSize + tagPadding * 2;
+        const tagX       = sx1;
+        const tagY       = sy1 - tagHeight;   // just above the box
+
+        // Tag background
+        ctx.fillStyle = '#FF3B30';
+        ctx.fillRect(tagX, tagY, textWidth + tagPadding * 2, tagHeight);
+
+        // Tag text
+        ctx.fillStyle = '#fff';
+        ctx.fillText(tagText, tagX + tagPadding, sy1 - tagPadding);
+      });
+    }
+
+    // ── 7. Show the text list of detections below the image ──
+    function showDetectionList(boxes, labels, scores) {
+      detectionsContainer.innerHTML = '';
+
+      labels.forEach((label, i) => {
+        const score   = scores[i] != null ? (scores[i] * 100).toFixed(1) + '%' : 'N/A';
+        const item    = document.createElement('div');
+        item.className = 'detection-item';
+        item.innerHTML =
+          `<span class="label">#${i + 1} &nbsp;${label}</span>` +
+          `<span class="score">${score} confidence</span>`;
+        detectionsContainer.appendChild(item);
+      });
+
+      resultsList.style.display = 'block';
+    }
+
+    // ── 8. Helpers ───────────────────────────────────────────
+
+    // Show a coloured status message
+    function showStatus(type, html) {
+      statusMsg.className     = type;   // 'loading' | 'error' | 'success'
+      statusMsg.innerHTML     = html;
+      statusMsg.style.display = 'block';
+    }
+
+    // Reset canvas + results list between runs
+    function clearResults() {
+      const ctx = boxCanvas.getContext('2d');
+      ctx.clearRect(0, 0, boxCanvas.width, boxCanvas.height);
+      detectionsContainer.innerHTML = '';
+      resultsList.style.display     = 'none';
+      statusMsg.style.display       = 'none';
+    }
+  </script>
+
+</body>
+</html>
