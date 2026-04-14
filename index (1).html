@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pothole Priority Predictor</title>
+
+  <!-- Leaflet.js for the map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Chart.js for the priority distribution chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ── Reset & base ── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+      padding: 32px 16px 60px;
+    }
+
+    /* ── Page header ── */
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+    header p {
+      margin-top: 6px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    /* ── Layout wrapper ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* Two columns on wide screens */
+    @media (min-width: 820px) {
+      .layout {
+        grid-template-columns: 1fr 1fr;
+      }
+      /* These span both columns */
+      .full-width { grid-column: 1 / -1; }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      padding: 24px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #888;
+      margin-bottom: 16px;
+    }
+
+    /* ── Upload area ── */
+    .upload-area {
+      border: 2px dashed #c8cfe0;
+      border-radius: 8px;
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-area:hover { border-color: #4a90e2; background: #f0f6ff; }
+    .upload-area p     { font-size: 14px; color: #888; margin-top: 8px; }
+
+    #fileInput { display: none; }
+
+    /* ── Image preview + canvas ── */
+    #previewWrapper {
+      display: none;
+      margin-top: 16px;
+      position: relative;
+    }
+    #previewImg {
+      display: block;
+      width: 100%;
+      border-radius: 8px;
+    }
+    #boxCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border-radius: 8px;
+      pointer-events: none;
+    }
+
+    /* ── Analyse button ── */
+    #predictBtn {
+      display: none;
+      margin-top: 16px;
+      width: 100%;
+      padding: 12px;
+      background: #4a90e2;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #predictBtn:hover     { background: #357abd; }
+    #predictBtn:disabled  { background: #aac5e8; cursor: not-allowed; }
+
+    /* ── Status message ── */
+    #statusMsg {
+      display: none;
+      margin-top: 14px;
+      font-size: 14px;
+      text-align: center;
+      padding: 10px;
+      border-radius: 6px;
+    }
+    #statusMsg.loading { background: #fff8e1; color: #856404; }
+    #statusMsg.error   { background: #fdecea; color: #c62828; }
+    #statusMsg.success { background: #e8f5e9; color: #2e7d32; }
+
+    /* ── Detection list ── */
+    #resultsList { display: none; margin-top: 16px; border-top: 1px solid #eee; padding-top: 14px; }
+    #resultsList h3 {
+      font-size: 13px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #888; margin-bottom: 10px;
+    }
+    .detection-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px; border-radius: 6px; background: #f7f9fc;
+      margin-bottom: 6px; font-size: 14px;
+    }
+    .detection-item .label { font-weight: 600; color: #333; }
+    .detection-item .score {
+      background: #e3f0ff; color: #1a5fa8;
+      padding: 3px 10px; border-radius: 20px;
+      font-weight: 600; font-size: 13px;
+    }
+
+    /* ── Summary stats row ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 0;
+    }
+    .stat-box {
+      background: #f7f9fc;
+      border-radius: 8px;
+      padding: 14px 10px;
+      text-align: center;
+    }
+    .stat-box .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #999;
+      margin-bottom: 6px;
+    }
+    .stat-box .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+    .stat-box .stat-sub {
+      font-size: 11px;
+      color: #aaa;
+      margin-top: 2px;
+    }
+
+    /* ── Severity bar ── */
+    .severity-section { margin-top: 0; }
+    .severity-label-row {
+      display: flex; justify-content: space-between;
+      font-size: 13px; color: #555; margin-bottom: 6px;
+    }
+    .severity-track {
+      background: #eee; border-radius: 8px; height: 10px; overflow: hidden;
+    }
+    .severity-fill {
+      height: 100%; border-radius: 8px;
+      transition: width 0.6s ease;
+      background: #ccc;
+    }
+
+    /* ── Repair info ── */
+    .repair-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .repair-box {
+      background: #f7f9fc;
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .repair-box .rb-label {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #999; margin-bottom: 6px;
+    }
+    .repair-box .rb-value {
+      font-size: 16px; font-weight: 700; color: #1a1a2e;
+    }
+
+    /* Priority badge */
+    .priority-badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+    .priority-high   { background: #fdecea; color: #c62828; }
+    .priority-medium { background: #fff8e1; color: #856404; }
+    .priority-low    { background: #e8f5e9; color: #2e7d32; }
+
+    /* ── Map ── */
+    #map {
+      width: 100%;
+      height: 320px;
+      border-radius: 8px;
+      background: #e8edf2;
+    }
+
+    /* ── Chart ── */
+    #chartWrapper {
+      position: relative;
+      height: 240px;
+    }
+
+    /* ── Placeholder text shown before first prediction ── */
+    .placeholder {
+      text-align: center;
+      color: #bbb;
+      font-size: 14px;
+      padding: 40px 0;
+    }
+
+    /* Inference time pill */
+    .infer-pill {
+      display: inline-block;
+      background: #f0f2f5;
+      border-radius: 20px;
+      font-size: 11px;
+      color: #888;
+      padding: 2px 10px;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── Header ─── -->
+  <header>
+    <h1>🛣️ Pothole Priority Predictor</h1>
+    <p>Upload a road image · detect potholes · get repair priority</p>
+  </header>
+
+  <div class="layout">
+
+    <!-- ══════════════════════════════════════
+         COLUMN 1 — Upload + Detections
+    ══════════════════════════════════════ -->
+    <div class="card full-width" style="grid-column: unset;">
+      <div class="card-title">Upload Road Image</div>
+
+      <!-- Upload trigger -->
+      <div class="upload-area" id="uploadArea">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+             stroke="#aab" stroke-width="1.5" stroke-linecap="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p>Click to upload a road image</p>
+        <p style="font-size:12px; margin-top:4px; color:#bbb;">JPG, PNG, WEBP — max 16 MB</p>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" />
+
+      <!-- Image preview + bounding boxes -->
+      <div id="previewWrapper">
+        <img id="previewImg" alt="Road preview" />
+        <canvas id="boxCanvas"></canvas>
+      </div>
+
+      <!-- Analyse button -->
+      <button id="predictBtn">🔍 Analyse Image</button>
+
+      <!-- Status -->
+      <div id="statusMsg"></div>
+
+      <!-- Detections list -->
+      <div id="resultsList">
+        <h3>Detections</h3>
+        <div id="detectionsContainer"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         SUMMARY STATS (full width)
+    ══════════════════════════════════════ -->
+    <div class="card full-width" id="summaryCard" style="display:none;">
+      <div class="card-title">Analysis Summary</div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-label">Potholes Found</div>
+          <div class="stat-value" id="statCount">—</div>
+          <div class="stat-sub">detections</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Priority Score</div>
+          <div class="stat-value" id="statScore">—</div>
+          <div class="stat-sub">out of 100</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Est. Cost</div>
+          <div class="stat-value" id="statCost">—</div>
+          <div class="stat-sub">INR</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         SEVERITY + REPAIR (left on wide)
+    ══════════════════════════════════════ -->
+    <div class="card" id="repairCard" style="display:none;">
+      <div class="card-title">Severity &amp; Repair Plan</div>
+
+      <!-- Severity bar -->
+      <div class="severity-section" style="margin-bottom:20px;">
+        <div class="severity-label-row">
+          <span>Severity level</span>
+          <span id="sevLabel" style="font-weight:600;">—</span>
+        </div>
+        <div class="severity-track">
+          <div class="severity-fill" id="sevFill" style="width:0%;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:#bbb; margin-top:4px;">
+          <span>Low (1)</span><span>High (5)</span>
+        </div>
+      </div>
+
+      <!-- Repair details -->
+      <div class="repair-grid">
+        <div class="repair-box">
+          <div class="rb-label">Repair Type</div>
+          <div class="rb-value" id="repairType">—</div>
+        </div>
+        <div class="repair-box">
+          <div class="rb-label">Estimated Cost</div>
+          <div class="rb-value" id="repairCost">—</div>
+        </div>
+        <div class="repair-box" style="grid-column: 1 / -1;">
+          <div class="rb-label">Priority Level</div>
+          <div id="priorityBadgeWrapper">—</div>
+          <div id="inferTime" class="infer-pill" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         CHART (right on wide)
+    ══════════════════════════════════════ -->
+    <div class="card" id="chartCard">
+      <div class="card-title">Priority Distribution</div>
+      <div id="chartWrapper">
+        <div class="placeholder" id="chartPlaceholder">Run an analysis to see the chart</div>
+        <canvas id="priorityChart" style="display:none;"></canvas>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         HEATMAP (full width)
+    ══════════════════════════════════════ -->
+    <div class="card full-width" id="mapCard">
+      <div class="card-title">Pothole Location Map</div>
+      <div id="map"></div>
+      <p style="font-size:12px; color:#bbb; margin-top:8px; text-align:center;">
+        📍 Coordinates are randomly offset for demo purposes
+      </p>
+    </div>
+
+  </div><!-- /.layout -->
+
+  <!-- ───────────────────────────────────────────────────────
+       JAVASCRIPT
+  ─────────────────────────────────────────────────────────── -->
+  <script>
+    // ── 1. DOM references ────────────────────────────────────
+    const uploadArea          = document.getElementById('uploadArea');
+    const fileInput           = document.getElementById('fileInput');
+    const previewWrapper      = document.getElementById('previewWrapper');
+    const previewImg          = document.getElementById('previewImg');
+    const boxCanvas           = document.getElementById('boxCanvas');
+    const predictBtn          = document.getElementById('predictBtn');
+    const statusMsg           = document.getElementById('statusMsg');
+    const resultsList         = document.getElementById('resultsList');
+    const detectionsContainer = document.getElementById('detectionsContainer');
+
+    // Dashboard panels
+    const summaryCard         = document.getElementById('summaryCard');
+    const repairCard          = document.getElementById('repairCard');
+
+    // Summary stat elements
+    const statCount  = document.getElementById('statCount');
+    const statScore  = document.getElementById('statScore');
+    const statCost   = document.getElementById('statCost');
+
+    // Severity + repair elements
+    const sevLabel            = document.getElementById('sevLabel');
+    const sevFill             = document.getElementById('sevFill');
+    const repairType          = document.getElementById('repairType');
+    const repairCost          = document.getElementById('repairCost');
+    const priorityBadgeWrapper= document.getElementById('priorityBadgeWrapper');
+    const inferTime           = document.getElementById('inferTime');
+
+    let selectedFile = null;
+
+    // ── 2. Upload area click ─────────────────────────────────
+    uploadArea.addEventListener('click', () => fileInput.click());
+
+    // ── 3. File selected → show preview ─────────────────────
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      selectedFile = file;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewImg.src = e.target.result;
+        previewImg.onload = () => {
+          resizeCanvas();
+          clearResults();
+          previewWrapper.style.display = 'block';
+          predictBtn.style.display     = 'block';
+        };
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // ── 4. Canvas resize ─────────────────────────────────────
+    function resizeCanvas() {
+      boxCanvas.width  = previewImg.offsetWidth;
+      boxCanvas.height = previewImg.offsetHeight;
+    }
+    window.addEventListener('resize', () => {
+      if (previewWrapper.style.display === 'block') resizeCanvas();
+    });
+
+    // ── 5. Analyse button → POST to backend ─────────────────
+    predictBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      predictBtn.disabled = true;
+      showStatus('loading', '⏳  Analysing image, please wait…');
+      clearResults();
+
+      try {
+        const formData = new FormData();
+        formData.append('image', selectedFile);
+
+        const response = await fetch('http://localhost:5000/predict', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.error || 'Backend returned an error');
+        }
+
+        // ── Parse predictions ──
+        const predictions = data.predictions || [];
+        const boxes  = predictions.map(p => [p.bbox.x1, p.bbox.y1, p.bbox.x2, p.bbox.y2]);
+        const labels = predictions.map(p => p.label);
+        const scores = predictions.map(p => p.confidence);
+
+        const count = boxes.length;
+        const timeLabel = data.inference_time_ms ? ` (${data.inference_time_ms} ms)` : '';
+
+        if (count === 0) {
+          showStatus('success', '✅  No potholes detected.');
+        } else {
+          showStatus('success', `✅  ${count} pothole${count > 1 ? 's' : ''} detected${timeLabel}`);
+          drawBoxes(boxes, labels, scores);
+          showDetectionList(labels, scores);
+        }
+
+        // ── Update dashboard panels ──
+        updateSummary(data, count);
+        updateRepairPanel(data);
+        updateChart(data);
+        addMapMarker(data);
+
+      } catch (err) {
+        console.error(err);
+        showStatus('error',
+          '❌  Could not reach the backend. Is the server running on localhost:5000?<br>' +
+          '<small>' + err.message + '</small>'
+        );
+      } finally {
+        predictBtn.disabled = false;
+      }
+    });
+
+    // ── 6. Draw bounding boxes ───────────────────────────────
+    function drawBoxes(boxes, labels, scores) {
+      const ctx = boxCanvas.getContext('2d');
+      ctx.clearRect(0, 0, boxCanvas.width, boxCanvas.height);
+
+      const scaleX = boxCanvas.width  / previewImg.naturalWidth;
+      const scaleY = boxCanvas.height / previewImg.naturalHeight;
+
+      boxes.forEach((box, i) => {
+        const [x1, y1, x2, y2] = box;
+        const sx1 = x1 * scaleX, sy1 = y1 * scaleY;
+        const sw  = (x2 - x1) * scaleX, sh = (y2 - y1) * scaleY;
+
+        ctx.strokeStyle = '#FF3B30';
+        ctx.lineWidth   = 2.5;
+        ctx.strokeRect(sx1, sy1, sw, sh);
+
+        ctx.fillStyle = 'rgba(255,59,48,0.12)';
+        ctx.fillRect(sx1, sy1, sw, sh);
+
+        const label   = labels[i] || 'pothole';
+        const score   = scores[i] != null ? (scores[i] * 100).toFixed(1) + '%' : '';
+        const tagText = `${label}  ${score}`;
+        ctx.font = 'bold 12px Arial';
+        ctx.textBaseline = 'bottom';
+        const tw  = ctx.measureText(tagText).width;
+        const pad = 4, th = 12 + pad * 2;
+        ctx.fillStyle = '#FF3B30';
+        ctx.fillRect(sx1, sy1 - th, tw + pad * 2, th);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(tagText, sx1 + pad, sy1 - pad);
+      });
+    }
+
+    // ── 7. Detection list below image ────────────────────────
+    function showDetectionList(labels, scores) {
+      detectionsContainer.innerHTML = '';
+      labels.forEach((label, i) => {
+        const score = scores[i] != null ? (scores[i] * 100).toFixed(1) + '%' : 'N/A';
+        const item  = document.createElement('div');
+        item.className = 'detection-item';
+        item.innerHTML =
+          `<span class="label">#${i + 1} &nbsp;${label}</span>` +
+          `<span class="score">${score} confidence</span>`;
+        detectionsContainer.appendChild(item);
+      });
+      resultsList.style.display = 'block';
+    }
+
+    // ── 8. Summary stats panel ───────────────────────────────
+    function updateSummary(data, count) {
+      statCount.textContent = count;
+      statScore.textContent = data.priority_score ?? '—';
+      statCost.textContent  = data.estimated_cost
+        ? '₹' + Number(data.estimated_cost).toLocaleString('en-IN')
+        : '—';
+      summaryCard.style.display = 'block';
+    }
+
+    // ── 9. Repair + severity panel ───────────────────────────
+    function updateRepairPanel(data) {
+      const sev = data.severity || 0;
+
+      // Severity bar — 5 levels → 20% each step
+      sevLabel.textContent  = `${sev} / 5`;
+      sevFill.style.width   = (sev / 5 * 100) + '%';
+
+      // Colour the bar based on level
+      if (sev <= 2)      sevFill.style.background = '#4caf50';  // green
+      else if (sev <= 3) sevFill.style.background = '#ffc107';  // amber
+      else               sevFill.style.background = '#f44336';  // red
+
+      repairType.textContent = data.repair_type || '—';
+      repairCost.textContent = data.estimated_cost
+        ? '₹' + Number(data.estimated_cost).toLocaleString('en-IN')
+        : '—';
+
+      // Priority badge
+      const score = data.priority_score || 0;
+      let level = 'low', levelText = 'Low Priority';
+      if (score >= 70)      { level = 'high';   levelText = '🔴 High Priority'; }
+      else if (score >= 40) { level = 'medium'; levelText = '🟡 Medium Priority'; }
+      else                  { level = 'low';    levelText = '🟢 Low Priority'; }
+
+      priorityBadgeWrapper.innerHTML =
+        `<span class="priority-badge priority-${level}">${levelText}</span>`;
+
+      // Inference time
+      if (data.inference_time_ms) {
+        inferTime.textContent  = `⚡ ${data.inference_time_ms} ms inference`;
+        inferTime.style.display = 'inline-block';
+      }
+
+      repairCard.style.display = 'block';
+    }
+
+    // ── 10. Chart (priority distribution) ───────────────────
+    // We accumulate counts across multiple runs in this session
+    const chartCounts = { High: 0, Medium: 0, Low: 0 };
+    let chartInstance = null;
+
+    function updateChart(data) {
+      const score = data.priority_score || 0;
+      if (score >= 70)      chartCounts.High++;
+      else if (score >= 40) chartCounts.Medium++;
+      else                  chartCounts.Low++;
+
+      const canvas      = document.getElementById('priorityChart');
+      const placeholder = document.getElementById('chartPlaceholder');
+      placeholder.style.display = 'none';
+      canvas.style.display      = 'block';
+
+      if (chartInstance) {
+        // Update existing chart data
+        chartInstance.data.datasets[0].data = [
+          chartCounts.High, chartCounts.Medium, chartCounts.Low
+        ];
+        chartInstance.update();
+        return;
+      }
+
+      // Create chart for the first time
+      chartInstance = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: ['High Priority', 'Medium Priority', 'Low Priority'],
+          datasets: [{
+            data: [chartCounts.High, chartCounts.Medium, chartCounts.Low],
+            backgroundColor: ['#f44336', '#ffc107', '#4caf50'],
+            borderColor:     ['#e53935', '#ffb300', '#43a047'],
+            borderWidth: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { font: { size: 13 }, padding: 16 }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.parsed} scan${ctx.parsed !== 1 ? 's' : ''}`
+              }
+            }
+          },
+          cutout: '60%',
+        }
+      });
+    }
+
+    // ── 11. Leaflet map ──────────────────────────────────────
+    // Initialise the map once, centred on Bengaluru
+    const map = L.map('map').setView([12.9716, 77.5946], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 18,
+    }).addTo(map);
+
+    // Add a map marker for each prediction result
+    function addMapMarker(data) {
+      const lat   = data.lat   || 12.9716;
+      const lng   = data.lng   || 77.5946;
+      const score = data.priority_score || 0;
+
+      // Pick marker colour based on priority
+      let color = '#4caf50';                           // green = low
+      if (score >= 70)      color = '#f44336';         // red = high
+      else if (score >= 40) color = '#ffc107';         // yellow = medium
+
+      // Custom circle marker
+      const marker = L.circleMarker([lat, lng], {
+        radius:      10,
+        fillColor:   color,
+        color:       '#fff',
+        weight:      2,
+        opacity:     1,
+        fillOpacity: 0.85,
+      }).addTo(map);
+
+      // Popup with details
+      const popupContent =
+        `<b>Pothole Detection</b><br>` +
+        `Severity: ${data.severity ?? '—'} / 5<br>` +
+        `Priority Score: ${data.priority_score ?? '—'}<br>` +
+        `Repair: ${data.repair_type ?? '—'}<br>` +
+        `Est. Cost: ₹${data.estimated_cost ? Number(data.estimated_cost).toLocaleString('en-IN') : '—'}`;
+
+      marker.bindPopup(popupContent);
+
+      // Pan map to latest marker
+      map.setView([lat, lng], 14);
+    }
+
+    // ── 12. Helpers ──────────────────────────────────────────
+    function showStatus(type, html) {
+      statusMsg.className     = type;
+      statusMsg.innerHTML     = html;
+      statusMsg.style.display = 'block';
+    }
+
+    function clearResults() {
+      const ctx = boxCanvas.getContext('2d');
+      ctx.clearRect(0, 0, boxCanvas.width, boxCanvas.height);
+      detectionsContainer.innerHTML = '';
+      resultsList.style.display     = 'none';
+      statusMsg.style.display       = 'none';
+    }
+  </script>
+
+</body>
+</html>
