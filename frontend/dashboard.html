@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pothole Priority Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0e;
+  --bg2:#0e1118;
+  --bg3:#141820;
+  --border:#1e2330;
+  --border2:#272e40;
+  --text:#dde3f0;
+  --muted:#6b7590;
+  --dim:#353d52;
+  --orange:#ff6b2b;
+  --orange-bg:#1a0f08;
+  --orange-border:#3d2010;
+  --yellow:#f5c842;
+  --yellow-bg:#1a1608;
+  --yellow-border:#3d3210;
+  --green:#3ecf8e;
+  --green-bg:#081a12;
+  --green-border:#103524;
+  --red:#ff4d4d;
+  --red-bg:#1a0808;
+  --red-border:#3d1010;
+  --blue:#4da6ff;
+  --blue-bg:#081526;
+  --blue-border:#102840;
+  --purple:#b06bff;
+  --purple-bg:#120a1a;
+  --purple-border:#281545;
+}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'DM Sans',sans-serif;
+  font-size:14px;
+  min-height:100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  position:fixed;top:0;left:0;
+  width:220px;height:100vh;
+  background:var(--bg2);
+  border-right:1px solid var(--border);
+  padding:24px 16px;
+  display:flex;flex-direction:column;gap:6px;
+  z-index:100;
+}
+.sidebar-logo{
+  font-family:'Syne',sans-serif;
+  font-size:16px;font-weight:800;
+  color:var(--text);
+  margin-bottom:20px;
+  padding-bottom:16px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;
+}
+.sidebar-logo span{color:var(--orange)}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:8px;
+  font-size:13px;font-weight:500;
+  color:var(--muted);cursor:pointer;
+  transition:all .15s;border:none;background:none;
+  width:100%;text-align:left;
+}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border)}
+.nav-icon{font-size:15px;width:20px;text-align:center}
+
+/* ── MAIN ── */
+.main{
+  margin-left:220px;
+  padding:28px 28px 50px;
+  min-height:100vh;
+}
+
+/* ── PAGE ── */
+.page{display:none}
+.page.active{display:block}
+
+/* ── PAGE HEADER ── */
+.page-header{margin-bottom:24px}
+.page-title{
+  font-family:'Syne',sans-serif;
+  font-size:22px;font-weight:800;
+  color:var(--text);letter-spacing:-.01em;
+  margin-bottom:4px;
+}
+.page-sub{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace}
+
+/* ── UPLOAD ZONE ── */
+.upload-zone{
+  border:2px dashed var(--border2);
+  border-radius:12px;
+  padding:36px;
+  text-align:center;
+  cursor:pointer;
+  transition:all .2s;
+  margin-bottom:20px;
+  background:var(--bg2);
+  position:relative;
+}
+.upload-zone:hover,.upload-zone.drag{
+  border-color:var(--orange);
+  background:var(--orange-bg);
+}
+.upload-zone input{
+  position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;
+}
+.upload-icon{font-size:32px;margin-bottom:8px}
+.upload-text{font-size:14px;color:var(--muted)}
+.upload-text strong{color:var(--orange)}
+.upload-hint{font-size:11px;color:var(--dim);margin-top:4px;font-family:'Space Mono',monospace}
+
+/* ── ZONE SELECT ROW ── */
+.zone-row{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:20px;flex-wrap:wrap;
+}
+.zone-label{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap}
+.zone-select{
+  background:var(--bg2);border:1px solid var(--border2);
+  color:var(--text);border-radius:8px;
+  padding:8px 14px;font-size:13px;
+  font-family:'DM Sans',sans-serif;
+  cursor:pointer;flex:1;max-width:260px;
+}
+.detect-btn{
+  background:var(--orange);color:#fff;
+  border:none;border-radius:8px;
+  padding:9px 24px;font-size:13px;font-weight:700;
+  font-family:'Syne',sans-serif;
+  cursor:pointer;transition:opacity .15s;
+  letter-spacing:.02em;
+  display:flex;align-items:center;gap:8px;
+}
+.detect-btn:hover{opacity:.85}
+.detect-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── GRID ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}
+
+/* ── CARD ── */
+.card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:16px;
+}
+.card-title{
+  font-family:'Space Mono',monospace;
+  font-size:10px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.08em;
+  margin-bottom:12px;
+}
+
+/* ── METRIC CARD ── */
+.metric-card{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:12px;padding:16px 20px;
+  text-align:center;
+}
+.metric-val{
+  font-family:'Syne',sans-serif;
+  font-size:2rem;font-weight:800;
+  margin:4px 0;line-height:1;
+}
+.metric-label{
+  font-size:11px;color:var(--muted);
+  font-family:'Space Mono',monospace;
+  text-transform:uppercase;letter-spacing:.06em;
+}
+.c-orange{color:var(--orange)}
+.c-red{color:var(--red)}
+.c-yellow{color:var(--yellow)}
+.c-green{color:var(--green)}
+.c-blue{color:var(--blue)}
+.c-purple{color:var(--purple)}
+.c-muted{color:var(--muted)}
+
+/* ── SEVERITY BADGE ── */
+.severity-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 16px;border-radius:20px;
+  font-family:'Space Mono',monospace;
+  font-size:12px;font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase;
+}
+.sev-none{background:var(--bg3);color:var(--muted);border:1px solid var(--border2)}
+.sev-1,.sev-2{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.sev-3{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.sev-4,.sev-5{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+
+/* ── PRIORITY BAR ── */
+.priority-bar-wrap{margin-top:8px}
+.priority-bar-track{
+  height:8px;background:var(--bg3);
+  border-radius:4px;overflow:hidden;
+}
+.priority-bar-fill{
+  height:100%;border-radius:4px;
+  transition:width .6s ease;
+  background:linear-gradient(90deg,var(--green),var(--yellow),var(--red));
+}
+.priority-labels{
+  display:flex;justify-content:space-between;
+  font-size:10px;color:var(--dim);
+  font-family:'Space Mono',monospace;
+  margin-top:4px;
+}
+
+/* ── IMAGE CANVAS AREA ── */
+.img-area{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:10px;
+  min-height:260px;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;position:relative;
+}
+.img-area canvas{max-width:100%;max-height:420px;display:block;margin:auto}
+.img-placeholder{color:var(--dim);font-family:'Space Mono',monospace;font-size:11px;text-align:center}
+
+/* ── DETECTION LIST ── */
+.detection-list{max-height:280px;overflow-y:auto}
+.det-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px;border-radius:6px;
+  margin-bottom:4px;background:var(--bg3);
+  font-size:12px;
+}
+.det-label{font-weight:600;color:var(--text)}
+.det-conf{
+  font-family:'Space Mono',monospace;font-size:11px;
+  color:var(--green);
+}
+.det-idx{
+  font-family:'Space Mono',monospace;font-size:10px;
+  color:var(--dim);min-width:24px;
+}
+
+/* ── REPAIR CARD ── */
+.repair-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.repair-row:last-child{border-bottom:none}
+.repair-key{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace}
+.repair-val{font-size:13px;font-weight:600;color:var(--text)}
+
+/* ── SPINNER ── */
+.spinner{
+  width:20px;height:20px;
+  border:2px solid rgba(255,107,43,.3);
+  border-top-color:var(--orange);
+  border-radius:50%;
+  animation:spin .7s linear infinite;
+  display:none;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── MAP ── */
+#map{height:420px;border-radius:10px;overflow:hidden}
+
+/* ── TABLE ── */
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{
+  background:var(--bg3);color:var(--muted);
+  font-family:'Space Mono',monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.06em;
+  padding:10px 12px;text-align:left;
+  border-bottom:1px solid var(--border2);
+}
+.data-table td{
+  padding:10px 12px;border-bottom:1px solid var(--border);
+  color:var(--text);
+}
+.data-table tr:hover td{background:var(--bg3)}
+
+/* ── ANALYTICS BARS ── */
+.metric-bar-row{margin-bottom:12px}
+.metric-bar-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+.metric-bar-name{color:var(--text)}
+.metric-bar-val{color:var(--muted);font-family:'Space Mono',monospace}
+.metric-bar-track{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.metric-bar-fill{height:100%;border-radius:3px;transition:width .8s ease}
+
+/* ── STATUS CHIP ── */
+.chip{
+  display:inline-block;padding:2px 8px;border-radius:10px;
+  font-size:10px;font-family:'Space Mono',monospace;
+  font-weight:700;letter-spacing:.03em;
+}
+.chip-green{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.chip-red{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.chip-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+
+/* ── EMPTY STATE ── */
+.empty{
+  text-align:center;padding:40px 20px;
+  color:var(--dim);font-family:'Space Mono',monospace;font-size:11px;
+}
+.empty-icon{font-size:32px;margin-bottom:8px;opacity:.4}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:24px;right:24px;
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:10px;padding:12px 18px;
+  font-size:13px;color:var(--text);
+  z-index:999;opacity:0;
+  transition:opacity .3s;
+  pointer-events:none;
+  max-width:300px;
+}
+.toast.show{opacity:1}
+
+@media(max-width:768px){
+  .sidebar{width:60px;padding:16px 8px}
+  .sidebar-logo,.nav-label{display:none}
+  .main{margin-left:60px;padding:16px}
+  .grid-2,.grid-4,.grid-3{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">🚧 <span>Pothole</span>AI</div>
+  <button class="nav-item active" onclick="showPage('detection',this)">
+    <span class="nav-icon">🔍</span><span class="nav-label">Detection</span>
+  </button>
+  <button class="nav-item" onclick="showPage('analytics',this)">
+    <span class="nav-icon">📊</span><span class="nav-label">Analytics</span>
+  </button>
+  <button class="nav-item" onclick="showPage('map',this)">
+    <span class="nav-icon">🗺️</span><span class="nav-label">Heatmap</span>
+  </button>
+  <button class="nav-item" onclick="showPage('history',this)">
+    <span class="nav-icon">🕓</span><span class="nav-label">History</span>
+  </button>
+</nav>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- ══════════════════════════════════════════
+       PAGE 1 — DETECTION
+  ═══════════════════════════════════════════ -->
+  <div class="page active" id="page-detection">
+    <div class="page-header">
+      <div class="page-title">🔍 Pothole Detection</div>
+      <div class="page-sub">Upload a road image · YOLOv11 · Flask API</div>
+    </div>
+
+    <!-- Upload -->
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept="image/*" onchange="onFileSelect(event)"/>
+      <div class="upload-icon">📷</div>
+      <div class="upload-text">Drop image here or <strong>click to browse</strong></div>
+      <div class="upload-hint">JPG · PNG · WEBP · max 16 MB</div>
+    </div>
+
+    <!-- Zone + Button -->
+    <div class="zone-row">
+      <span class="zone-label">📍 Zone:</span>
+      <select class="zone-select" id="zoneSelect">
+        <option>Koramangala</option>
+        <option>Hebbal</option>
+        <option>Whitefield</option>
+        <option>BTM Layout</option>
+        <option>Jayanagar</option>
+        <option>Marathahalli</option>
+        <option>Yeshwanthpur</option>
+        <option>Electronic City</option>
+        <option>MG Road</option>
+        <option>Rajajinagar</option>
+      </select>
+      <button class="detect-btn" id="detectBtn" onclick="runDetection()" disabled>
+        <div class="spinner" id="spinner"></div>
+        <span id="detectLabel">⚡ Detect Potholes</span>
+      </button>
+    </div>
+
+    <!-- Images side by side -->
+    <div class="grid-2" id="imgGrid" style="display:none">
+      <div class="card">
+        <div class="card-title">Original Image</div>
+        <div class="img-area"><img id="origImg" style="max-width:100%;max-height:380px;border-radius:6px"/></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Detection Result</div>
+        <div class="img-area"><canvas id="resultCanvas"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Metrics row -->
+    <div class="grid-4" id="metricsRow" style="display:none">
+      <div class="metric-card">
+        <div class="metric-label">Potholes</div>
+        <div class="metric-val c-orange" id="mCount">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Severity</div>
+        <div style="margin-top:8px" id="mSeverityBadge">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Priority Score</div>
+        <div class="metric-val c-red" id="mPriority">0</div>
+        <div class="priority-bar-wrap">
+          <div class="priority-bar-track">
+            <div class="priority-bar-fill" id="priorityBar" style="width:0%"></div>
+          </div>
+          <div class="priority-labels"><span>0</span><span>50</span><span>100</span></div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Inference</div>
+        <div class="metric-val c-blue" id="mTime">—</div>
+        <div class="metric-label">ms</div>
+      </div>
+    </div>
+
+    <!-- Detections + Repair -->
+    <div class="grid-2" id="detailGrid" style="display:none">
+      <div class="card">
+        <div class="card-title">Detections</div>
+        <div class="detection-list" id="detectionList"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Repair Estimate</div>
+        <div id="repairInfo"></div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="empty" id="emptyState">
+      <div class="empty-icon">🛣️</div>
+      <div>Upload a road image to begin detection</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PAGE 2 — ANALYTICS
+  ═══════════════════════════════════════════ -->
+  <div class="page" id="page-analytics">
+    <div class="page-header">
+      <div class="page-title">📊 Model Analytics</div>
+      <div class="page-sub">YOLOv11 performance metrics · training dataset stats</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Model Performance</div>
+        <div class="metric-bar-row">
+          <div class="metric-bar-label"><span class="metric-bar-name">mAP50</span><span class="metric-bar-val">88.3%</span></div>
+          <div class="metric-bar-track"><div class="metric-bar-fill" style="width:88.3%;background:var(--blue)"></div></div>
+        </div>
+        <div class="metric-bar-row">
+          <div class="metric-bar-label"><span class="metric-bar-name">mAP50-95</span><span class="metric-bar-val">65.8%</span></div>
+          <div class="metric-bar-track"><div class="metric-bar-fill" style="width:65.8%;background:var(--purple)"></div></div>
+        </div>
+        <div class="metric-bar-row">
+          <div class="metric-bar-label"><span class="metric-bar-name">Precision</span><span class="metric-bar-val">86.1%</span></div>
+          <div class="metric-bar-track"><div class="metric-bar-fill" style="width:86.1%;background:var(--green)"></div></div>
+        </div>
+        <div class="metric-bar-row">
+          <div class="metric-bar-label"><span class="metric-bar-name">Recall</span><span class="metric-bar-val">81.0%</span></div>
+          <div class="metric-bar-track"><div class="metric-bar-fill" style="width:81%;background:var(--orange)"></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Dataset Split</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <div class="repair-row">
+            <span class="repair-key">Train images</span>
+            <span class="repair-val c-blue">6,809</span>
+          </div>
+          <div class="repair-row">
+            <span class="repair-key">Validation images</span>
+            <span class="repair-val c-orange">1,944</span>
+          </div>
+          <div class="repair-row">
+            <span class="repair-key">Test images</span>
+            <span class="repair-val c-green">974</span>
+          </div>
+          <div class="repair-row">
+            <span class="repair-key">Total</span>
+            <span class="repair-val">9,727</span>
+          </div>
+          <div class="repair-row">
+            <span class="repair-key">Source</span>
+            <span class="repair-val">Roboflow</span>
+          </div>
+          <div class="repair-row">
+            <span class="repair-key">Model</span>
+            <span class="repair-val">YOLOv11n</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session stats -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">This Session</div>
+      <div class="grid-4" style="margin:0">
+        <div class="metric-card" style="border:none;background:var(--bg3)">
+          <div class="metric-label">Images Processed</div>
+          <div class="metric-val c-orange" id="statImages">0</div>
+        </div>
+        <div class="metric-card" style="border:none;background:var(--bg3)">
+          <div class="metric-label">Total Potholes</div>
+          <div class="metric-val c-red" id="statPotholes">0</div>
+        </div>
+        <div class="metric-card" style="border:none;background:var(--bg3)">
+          <div class="metric-label">Avg Priority</div>
+          <div class="metric-val c-yellow" id="statAvgPriority">—</div>
+        </div>
+        <div class="metric-card" style="border:none;background:var(--bg3)">
+          <div class="metric-label">Avg Inference</div>
+          <div class="metric-val c-blue" id="statAvgTime">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PAGE 3 — HEATMAP
+  ═══════════════════════════════════════════ -->
+  <div class="page" id="page-map">
+    <div class="page-header">
+      <div class="page-title">🗺️ Bangalore Heatmap</div>
+      <div class="page-sub">Pothole density across zones · updates after each detection</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div id="map"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Zone Summary</div>
+      <table class="data-table" id="zoneTable">
+        <thead>
+          <tr>
+            <th>Zone</th>
+            <th>Potholes</th>
+            <th>Severity</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="zoneTableBody">
+          <tr><td colspan="4" class="empty">No detections yet — upload images to populate</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PAGE 4 — HISTORY
+  ═══════════════════════════════════════════ -->
+  <div class="page" id="page-history">
+    <div class="page-header">
+      <div class="page-title">🕓 Detection History</div>
+      <div class="page-sub">All uploads this session</div>
+    </div>
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr><th>#</th><th>File</th><th>Zone</th><th>Count</th><th>Severity</th><th>Priority</th><th>Cost (₹)</th><th>Time (ms)</th></tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr><td colspan="8" class="empty">No history yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+const API = 'http://localhost:5000';
+
+// ── STATE ───────────────────────────────────────────────────────────────────
+let selectedFile   = null;
+let sessionHistory = [];
+let zoneData       = {}; // zone → total potholes
+let mapInitialized = false;
+let leafletMap, heatLayer;
+
+// Pre-seeded Bangalore zone coordinates
+const ZONE_COORDS = {
+  'Koramangala':    [12.9352, 77.6245],
+  'Hebbal':         [13.0355, 77.5913],
+  'Whitefield':     [12.9698, 77.7499],
+  'BTM Layout':     [12.9166, 77.6101],
+  'Jayanagar':      [12.9308, 77.5931],
+  'Marathahalli':   [12.9591, 77.6974],
+  'Yeshwanthpur':   [13.0275, 77.5445],
+  'Electronic City':[12.8399, 77.6770],
+  'MG Road':        [12.9716, 77.5946],
+  'Rajajinagar':    [13.0198, 77.5521],
+};
+
+// ── NAVIGATION ───────────────────────────────────────────────────────────────
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  btn.classList.add('active');
+
+  if (name === 'map') initMap();
+  if (name === 'analytics') updateSessionStats();
+}
+
+// ── FILE SELECTION ───────────────────────────────────────────────────────────
+function onFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  selectedFile = file;
+
+  const zone = document.getElementById('uploadZone');
+  zone.style.borderColor = 'var(--green)';
+  zone.querySelector('.upload-text').innerHTML = `<strong style="color:var(--green)">✓ ${file.name}</strong>`;
+
+  document.getElementById('detectBtn').disabled = false;
+  showToast(`📁 ${file.name} ready`);
+}
+
+// Drag & drop
+const uz = document.getElementById('uploadZone');
+uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('drag'));
+uz.addEventListener('drop', e => {
+  e.preventDefault(); uz.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) { selectedFile = file; onFileSelect({target:{files:[file]}}); }
+});
+
+// ── RUN DETECTION ────────────────────────────────────────────────────────────
+async function runDetection() {
+  if (!selectedFile) return;
+
+  const btn    = document.getElementById('detectBtn');
+  const spinner= document.getElementById('spinner');
+  const label  = document.getElementById('detectLabel');
+
+  btn.disabled = true;
+  spinner.style.display = 'block';
+  label.textContent = 'Detecting…';
+
+  const formData = new FormData();
+  formData.append('image', selectedFile);
+
+  try {
+    const res  = await fetch(`${API}/predict`, { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (!data.success) throw new Error(data.error || 'API error');
+
+    renderResults(data);
+    updateHistory(data);
+    updateZoneData(data);
+    showToast(`✅ ${data.count} pothole(s) detected`);
+
+  } catch (err) {
+    showToast(`❌ ${err.message}`, true);
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    label.textContent = '⚡ Detect Potholes';
+  }
+}
+
+// ── RENDER RESULTS ────────────────────────────────────────────────────────────
+function renderResults(data) {
+  // show panels
+  document.getElementById('emptyState').style.display  = 'none';
+  document.getElementById('imgGrid').style.display     = 'grid';
+  document.getElementById('metricsRow').style.display  = 'grid';
+  document.getElementById('detailGrid').style.display  = 'grid';
+
+  // ── Original image ──
+  const origImg = document.getElementById('origImg');
+  origImg.src = URL.createObjectURL(selectedFile);
+
+  // ── Draw bounding boxes on canvas ──
+  const canvas = document.getElementById('resultCanvas');
+  const ctx    = canvas.getContext('2d');
+  const img    = new Image();
+  img.onload = () => {
+    canvas.width  = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+
+    const colors = {
+      0: '#ff4d4d',  1: '#f5c842', 2: '#3ecf8e',
+      3: '#4da6ff',  4: '#b06bff'
+    };
+
+    data.predictions.forEach((pred, i) => {
+      const { x1, y1, x2, y2 } = pred.bbox;
+      const color = colors[i % 5];
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = Math.max(2, img.width / 300);
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+      // label background
+      const label = `${pred.label} ${(pred.confidence * 100).toFixed(0)}%`;
+      ctx.font = `bold ${Math.max(12, img.width / 50)}px DM Sans`;
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = color + 'cc';
+      ctx.fillRect(x1, y1 - Math.max(18, img.width / 35), tw + 8, Math.max(18, img.width / 35));
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, x1 + 4, y1 - 4);
+    });
+  };
+  img.src = URL.createObjectURL(selectedFile);
+
+  // ── Metrics ──
+  document.getElementById('mCount').textContent   = data.count;
+  document.getElementById('mPriority').textContent = data.priority_score;
+  document.getElementById('mTime').textContent    = data.inference_time_ms;
+  document.getElementById('priorityBar').style.width = data.priority_score + '%';
+
+  // Severity badge
+  const sevLabel = sevText(data.severity);
+  const sevClass = data.severity === 0 ? 'sev-none' : `sev-${data.severity}`;
+  document.getElementById('mSeverityBadge').innerHTML =
+    `<div class="severity-badge ${sevClass}">${sevEmoji(data.severity)} ${sevLabel}</div>`;
+
+  // ── Detection list ──
+  const list = document.getElementById('detectionList');
+  if (data.predictions.length === 0) {
+    list.innerHTML = '<div class="empty" style="padding:20px"><div class="empty-icon">✅</div>No potholes detected</div>';
+  } else {
+    list.innerHTML = data.predictions.map((p, i) => `
+      <div class="det-row">
+        <span class="det-idx">#${i+1}</span>
+        <span class="det-label">${p.label}</span>
+        <span class="det-conf">${(p.confidence * 100).toFixed(1)}%</span>
+      </div>
+    `).join('');
+  }
+
+  // ── Repair info ──
+  document.getElementById('repairInfo').innerHTML = `
+    <div class="repair-row">
+      <span class="repair-key">Repair Type</span>
+      <span class="repair-val">${data.repair_type}</span>
+    </div>
+    <div class="repair-row">
+      <span class="repair-key">Estimated Cost</span>
+      <span class="repair-val c-orange">₹${data.estimated_cost.toLocaleString('en-IN')}</span>
+    </div>
+    <div class="repair-row">
+      <span class="repair-key">Severity Score</span>
+      <span class="repair-val">${data.severity} / 5</span>
+    </div>
+    <div class="repair-row">
+      <span class="repair-key">Priority Score</span>
+      <span class="repair-val c-red">${data.priority_score} / 100</span>
+    </div>
+    <div class="repair-row">
+      <span class="repair-key">Coordinates</span>
+      <span class="repair-val" style="font-size:11px;font-family:'Space Mono',monospace">${data.lat}, ${data.lng}</span>
+    </div>
+  `;
+}
+
+// ── HISTORY ──────────────────────────────────────────────────────────────────
+function updateHistory(data) {
+  const zone = document.getElementById('zoneSelect').value;
+  sessionHistory.unshift({
+    file:      selectedFile.name,
+    zone,
+    count:     data.count,
+    severity:  data.severity,
+    priority:  data.priority_score,
+    cost:      data.estimated_cost,
+    time:      data.inference_time_ms,
+  });
+
+  const tbody = document.getElementById('historyBody');
+  tbody.innerHTML = sessionHistory.map((h, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td style="font-family:'Space Mono',monospace;font-size:11px">${h.file}</td>
+      <td>${h.zone}</td>
+      <td><strong>${h.count}</strong></td>
+      <td><span class="chip ${sevChip(h.severity)}">${sevText(h.severity)}</span></td>
+      <td><strong>${h.priority}</strong></td>
+      <td>₹${h.cost.toLocaleString('en-IN')}</td>
+      <td style="font-family:'Space Mono',monospace">${h.time}</td>
+    </tr>
+  `).join('');
+}
+
+// ── ZONE DATA + MAP ───────────────────────────────────────────────────────────
+function updateZoneData(data) {
+  const zone = document.getElementById('zoneSelect').value;
+  zoneData[zone] = (zoneData[zone] || 0) + data.count;
+  updateZoneTable();
+  if (mapInitialized) updateHeatmap();
+}
+
+function updateZoneTable() {
+  const tbody = document.getElementById('zoneTableBody');
+  const entries = Object.entries(zoneData).sort((a,b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No detections yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = entries.map(([zone, count]) => {
+    const sev = count > 10 ? 'High' : count > 4 ? 'Medium' : 'Low';
+    const chipClass = sev === 'High' ? 'chip-red' : sev === 'Medium' ? 'chip-yellow' : 'chip-green';
+    return `<tr>
+      <td>${zone}</td>
+      <td><strong>${count}</strong></td>
+      <td><span class="chip ${chipClass}">${sev}</span></td>
+      <td><span class="chip ${count > 0 ? 'chip-red' : 'chip-green'}">${count > 0 ? 'Needs Repair' : 'Clear'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── MAP ───────────────────────────────────────────────────────────────────────
+function initMap() {
+  if (mapInitialized) return;
+  mapInitialized = true;
+
+  leafletMap = L.map('map').setView([12.9716, 77.5946], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(leafletMap);
+
+  // Pre-seed markers for visual context
+  const preseeded = {
+    'Koramangala': 45, 'Hebbal': 51, 'Marathahalli': 38,
+    'Yeshwanthpur': 41, 'Whitefield': 32, 'Jayanagar': 28,
+    'BTM Layout': 22, 'Electronic City': 19
+  };
+
+  const heatPoints = Object.entries(preseeded).map(([zone, count]) => {
+    const coords = ZONE_COORDS[zone];
+    return [...coords, Math.min(count / 60, 1.0)];
+  });
+
+  heatLayer = L.heatLayer(heatPoints, {
+    radius: 45, blur: 30,
+    gradient: { 0.3:'#3ecf8e', 0.6:'#f5c842', 0.85:'#ff6b2b', 1.0:'#ff4d4d' }
+  }).addTo(leafletMap);
+
+  // Zone markers
+  Object.entries(preseeded).forEach(([zone, count]) => {
+    const coords = ZONE_COORDS[zone];
+    const sev    = count > 40 ? 'red' : count > 25 ? 'orange' : 'green';
+    L.circleMarker(coords, {
+      radius: Math.max(8, count / 4),
+      color: sev, fillColor: sev,
+      fillOpacity: 0.6, weight: 2
+    }).bindPopup(`<b>${zone}</b><br>${count} potholes`).addTo(leafletMap);
+  });
+}
+
+function updateHeatmap() {
+  if (!heatLayer) return;
+  const points = Object.entries(zoneData)
+    .filter(([zone]) => ZONE_COORDS[zone])
+    .map(([zone, count]) => [...ZONE_COORDS[zone], Math.min(count / 10, 1.0)]);
+  if (points.length > 0) heatLayer.setLatLngs(points);
+}
+
+// ── SESSION STATS ─────────────────────────────────────────────────────────────
+function updateSessionStats() {
+  const n = sessionHistory.length;
+  document.getElementById('statImages').textContent = n;
+  if (n === 0) return;
+  const totalPotholes = sessionHistory.reduce((s,h) => s + h.count, 0);
+  const avgPriority   = Math.round(sessionHistory.reduce((s,h) => s + h.priority, 0) / n);
+  const avgTime       = Math.round(sessionHistory.reduce((s,h) => s + h.time, 0) / n);
+  document.getElementById('statPotholes').textContent    = totalPotholes;
+  document.getElementById('statAvgPriority').textContent = avgPriority;
+  document.getElementById('statAvgTime').textContent     = avgTime + 'ms';
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function sevText(s) {
+  return ['None','Low','Low','Medium','High','Critical'][s] || 'Unknown';
+}
+function sevEmoji(s) {
+  return ['—','🟢','🟢','🟡','🔴','🆘'][s] || '?';
+}
+function sevChip(s) {
+  if (s === 0) return '';
+  if (s <= 2)  return 'chip-green';
+  if (s === 3) return 'chip-yellow';
+  return 'chip-red';
+}
+
+function showToast(msg, isError=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = isError ? 'var(--red-border)' : 'var(--green-border)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
