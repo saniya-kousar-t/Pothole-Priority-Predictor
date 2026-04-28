@@ -1,0 +1,2032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PotholeIntel — AI-Powered Road Intelligence System</title>
+  <meta name="description" content="Detect, assess, and prioritize pothole repairs with AI. YOLOv11-powered road intelligence system for smarter Indian infrastructure." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Inter:wght@300;400;500;600;700;800;900&display=swap">
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════════════════════════════ */
+    :root, [data-theme="dark"] {
+      --bg:        #050709;
+      --bg2:       #080a0e;
+      --surface:   #0d1017;
+      --surface2:  #12161e;
+      --surface3:  #1a1f2e;
+      --border:    rgba(255,255,255,0.06);
+      --border2:   rgba(255,255,255,0.10);
+      --border3:   rgba(255,255,255,0.15);
+      --accent:    #f5c842;
+      --accent-dim:rgba(245,200,66,0.15);
+      --accent2:   #ff5c5c;
+      --accent3:   #00e5c4;
+      --accent4:   #6366f1;
+      --text:      #e8eaf2;
+      --text2:     #c4c8d8;
+      --muted:     #5a5f7a;
+      --muted2:    #7a7f9a;
+      --font-mono: 'Space Mono', monospace;
+      --font-body: 'DM Sans', 'Inter', sans-serif;
+      --font-display: 'Inter', 'DM Sans', sans-serif;
+      --r:         16px;
+      --r2:        24px;
+      --ease:      cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-out:  cubic-bezier(0.33, 1, 0.68, 1);
+      --grid-alpha: 0.015;
+      --header-bg: rgba(5,7,9,0.85);
+    }
+    [data-theme="light"] {
+      --bg:        #f0f2f5;
+      --bg2:       #e8eaef;
+      --surface:   #ffffff;
+      --surface2:  #f5f6f8;
+      --surface3:  #e0e3ea;
+      --border:    rgba(0,0,0,0.07);
+      --border2:   rgba(0,0,0,0.10);
+      --border3:   rgba(0,0,0,0.14);
+      --accent:    #d4a017;
+      --accent-dim:rgba(212,160,23,0.15);
+      --accent2:   #e04040;
+      --accent3:   #00b89c;
+      --accent4:   #5558e0;
+      --text:      #1a1c24;
+      --text2:     #3a3d4a;
+      --muted:     #6b7082;
+      --muted2:    #4f5366;
+      --grid-alpha: 0.04;
+      --header-bg: rgba(240,242,245,0.88);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+    a { text-decoration: none; color: inherit; }
+    button { cursor: pointer; border: none; background: none; font-family: inherit; }
+    img { max-width: 100%; display: block; }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(128,128,128,var(--grid-alpha)) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(128,128,128,var(--grid-alpha)) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .section { position: relative; z-index: 1; }
+    .section-label {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--accent);
+      border: 1px solid var(--accent-dim); padding: 6px 18px;
+      border-radius: 100px; margin-bottom: 20px;
+    }
+    .section-label::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(245,200,66,.5); }
+      50% { opacity: .6; box-shadow: 0 0 0 6px rgba(245,200,66,0); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HEADER — Glassmorphic with scroll effect
+    ═══════════════════════════════════════════════════════════════ */
+    .header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      padding: 16px 0;
+      transition: all 0.4s var(--ease);
+    }
+    .header.scrolled {
+      padding: 10px 0;
+      background: var(--header-bg);
+      backdrop-filter: blur(24px) saturate(1.4);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 1200px; margin: 0 auto; padding: 0 24px;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .logo-icon {
+      width: 36px; height: 36px; background: var(--accent);
+      border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; font-size: 18px;
+      box-shadow: 0 0 20px rgba(245,200,66,0.2);
+    }
+    .logo-text {
+      font-family: var(--font-mono); font-size: 14px; font-weight: 700;
+      letter-spacing: 0.1em; color: var(--text);
+    }
+    .logo-text span { color: var(--accent); }
+
+    .nav { display: flex; align-items: center; gap: 32px; }
+    .nav-links { display: flex; gap: 28px; list-style: none; }
+    .nav-links a {
+      font-size: 14px; font-weight: 400; color: var(--muted2);
+      transition: color 0.3s; position: relative;
+    }
+    .nav-links a::after {
+      content: ''; position: absolute; bottom: -4px; left: 0;
+      width: 0; height: 2px; background: var(--accent);
+      border-radius: 2px; transition: width 0.3s var(--ease);
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a:hover::after { width: 100%; }
+
+    .nav-cta {
+      padding: 10px 24px; background: var(--accent); color: #080a0e;
+      font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      border-radius: 10px; transition: all 0.3s var(--ease);
+    }
+    .nav-cta:hover {
+      background: #ffd55e; transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(245,200,66,0.3);
+    }
+
+    .mobile-menu-btn {
+      display: none; flex-direction: column; gap: 5px;
+      padding: 8px; cursor: pointer;
+    }
+    .mobile-menu-btn span {
+      width: 22px; height: 2px; background: var(--text);
+      border-radius: 2px; transition: all 0.3s;
+    }
+
+    /* CONTROLS (theme + lang) */
+    .controls-bar {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .theme-toggle {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; cursor: pointer; transition: all 0.25s var(--ease);
+    }
+    .theme-toggle:hover {
+      border-color: var(--border2); transform: translateY(-2px);
+      background: var(--surface2);
+    }
+    .lang-select {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--text); background: var(--surface);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 28px 8px 10px; cursor: pointer;
+      letter-spacing: 0.04em; appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a7f9a' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+      transition: all 0.25s;
+    }
+    .lang-select:hover { border-color: var(--border2); }
+    .lang-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(245,200,66,.15); }
+    .lang-select option { background: var(--surface); color: var(--text); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HERO — Shape Landing with animated geometric forms
+    ═══════════════════════════════════════════════════════════════ */
+    .hero {
+      position: relative; min-height: 100vh; display: flex;
+      align-items: center; justify-content: center;
+      padding: 120px 24px 80px; overflow: hidden;
+    }
+
+    /* Animated floating shapes */
+    .hero-shapes { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+    .shape {
+      position: absolute; border-radius: 50%;
+      filter: blur(80px); opacity: 0.12;
+      animation: float-shape 20s ease-in-out infinite;
+    }
+    .shape-1 {
+      width: 600px; height: 600px; background: var(--accent);
+      top: -200px; right: -150px; animation-delay: 0s;
+    }
+    .shape-2 {
+      width: 500px; height: 500px; background: var(--accent3);
+      bottom: -150px; left: -100px; animation-delay: -7s;
+    }
+    .shape-3 {
+      width: 350px; height: 350px; background: var(--accent4);
+      top: 30%; left: 20%; animation-delay: -14s;
+    }
+    .shape-4 {
+      width: 250px; height: 250px; background: var(--accent2);
+      top: 20%; right: 25%; animation-delay: -3s; opacity: 0.08;
+    }
+    @keyframes float-shape {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(30px, -40px) scale(1.05); }
+      50% { transform: translate(-20px, 20px) scale(0.98); }
+      75% { transform: translate(15px, 30px) scale(1.02); }
+    }
+
+    /* Geometric outlines */
+    .hero-geo {
+      position: absolute; border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 20px; animation: rotate-geo 60s linear infinite;
+    }
+    .hero-geo-1 { width: 500px; height: 500px; top: 10%; right: -10%; }
+    .hero-geo-2 { width: 400px; height: 400px; bottom: 5%; left: -5%; animation-direction: reverse; animation-duration: 45s; }
+    .hero-geo-3 { width: 200px; height: 200px; top: 40%; left: 10%; animation-duration: 30s; border-radius: 50%; }
+    @keyframes rotate-geo {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Scan line effect */
+    .scan-line {
+      position: absolute; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0.15;
+      animation: scan-move 4s ease-in-out infinite;
+    }
+    @keyframes scan-move {
+      0% { top: 10%; } 50% { top: 90%; } 100% { top: 10%; }
+    }
+
+    .hero-content {
+      position: relative; z-index: 2; text-align: center;
+      max-width: 820px;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+      color: var(--accent); text-transform: uppercase;
+      border: 1px solid rgba(245,200,66,0.2);
+      padding: 8px 20px; border-radius: 100px; margin-bottom: 28px;
+      background: rgba(245,200,66,0.04);
+      backdrop-filter: blur(20px);
+      animation: fadeInUp 0.8s var(--ease) both;
+    }
+    .hero-badge-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    .hero h1 {
+      font-family: var(--font-display); font-size: clamp(40px, 6vw, 80px);
+      font-weight: 800; line-height: 1.05; letter-spacing: -0.03em;
+      margin-bottom: 24px;
+      animation: fadeInUp 0.8s var(--ease) 0.1s both;
+    }
+    .hero h1 .gradient-text {
+      background: linear-gradient(135deg, var(--accent) 0%, #ff9b42 50%, var(--accent2) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero h1 .line-2 { display: block; }
+
+    .hero-sub {
+      font-size: clamp(16px, 1.8vw, 20px); color: var(--muted2);
+      font-weight: 300; max-width: 560px; margin: 0 auto 40px;
+      line-height: 1.7;
+      animation: fadeInUp 0.8s var(--ease) 0.2s both;
+    }
+
+    .hero-actions {
+      display: flex; align-items: center; justify-content: center;
+      gap: 16px; flex-wrap: wrap;
+      animation: fadeInUp 0.8s var(--ease) 0.3s both;
+    }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 16px 36px; background: var(--accent); color: #080a0e;
+      font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      border-radius: 14px; transition: all 0.3s var(--ease);
+      position: relative; overflow: hidden;
+    }
+    .btn-primary::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%);
+      transform: translateX(-100%); transition: transform 0.6s;
+    }
+    .btn-primary:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px rgba(245,200,66,0.35);
+    }
+    .btn-primary:hover::before { transform: translateX(100%); }
+
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 16px 36px; background: transparent; color: var(--text);
+      font-size: 14px; font-weight: 500; border: 1px solid var(--border2);
+      border-radius: 14px; transition: all 0.3s var(--ease);
+    }
+    .btn-secondary:hover {
+      border-color: var(--border3); background: rgba(255,255,255,0.03);
+      transform: translateY(-2px);
+    }
+    .btn-secondary svg { width: 18px; height: 18px; }
+
+    .hero-stats {
+      display: flex; align-items: center; justify-content: center;
+      gap: 48px; margin-top: 60px;
+      animation: fadeInUp 0.8s var(--ease) 0.4s both;
+    }
+    .hero-stat { text-align: center; }
+    .hero-stat-value {
+      font-family: var(--font-mono); font-size: 32px; font-weight: 700;
+      color: var(--text);
+    }
+    .hero-stat-value .accent { color: var(--accent); }
+    .hero-stat-label {
+      font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 4px;
+    }
+    .stat-divider {
+      width: 1px; height: 40px; background: var(--border2);
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FEATURES — Grid with hover cards
+    ═══════════════════════════════════════════════════════════════ */
+    .features {
+      padding: 100px 0 120px;
+      position: relative; z-index: 1;
+    }
+    .features-header { text-align: center; margin-bottom: 60px; }
+    .features-header h2 {
+      font-family: var(--font-display); font-size: clamp(28px, 4vw, 48px);
+      font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px;
+    }
+    .features-header p {
+      font-size: 16px; color: var(--muted2); max-width: 500px;
+      margin: 0 auto; font-weight: 300;
+    }
+
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 36px 28px;
+      position: relative; overflow: hidden;
+      transition: all 0.4s var(--ease);
+    }
+    .feature-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 3px; background: var(--fc-color, var(--accent));
+      opacity: 0; transition: opacity 0.4s;
+    }
+    .feature-card::after {
+      content: ''; position: absolute; top: -50%; right: -50%;
+      width: 200px; height: 200px; border-radius: 50%;
+      background: var(--fc-color, var(--accent));
+      opacity: 0; filter: blur(60px);
+      transition: opacity 0.5s;
+    }
+    .feature-card:hover {
+      border-color: rgba(255,255,255,0.12);
+      transform: translateY(-6px);
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-card:hover::after { opacity: 0.06; }
+    .feature-card:hover .feature-icon { transform: scale(1.1) translateY(-2px); }
+
+    .feature-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; margin-bottom: 20px;
+      background: var(--surface2); border: 1px solid var(--border);
+      transition: all 0.4s var(--ease);
+    }
+    .feature-card h3 {
+      font-family: var(--font-display); font-size: 18px; font-weight: 600;
+      margin-bottom: 10px; position: relative; z-index: 1;
+    }
+    .feature-card p {
+      font-size: 14px; color: var(--muted2); line-height: 1.7;
+      font-weight: 300; position: relative; z-index: 1;
+    }
+
+    /* Span 2 columns card */
+    .feature-card.wide { grid-column: span 2; }
+    .feature-card.wide .feature-inner {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
+      align-items: center;
+    }
+    .feature-visual {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 14px; padding: 24px; position: relative; overflow: hidden;
+    }
+    .visual-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    .visual-cell {
+      aspect-ratio: 1; border-radius: 8px; position: relative;
+      overflow: hidden; border: 1px solid var(--border);
+    }
+    .visual-cell-inner {
+      position: absolute; inset: 4px; border-radius: 5px;
+    }
+    .vc-red { background: rgba(255,92,92,0.2); }
+    .vc-yellow { background: rgba(245,200,66,0.2); }
+    .vc-green { background: rgba(61,220,132,0.2); }
+    .vc-blue { background: rgba(99,102,241,0.15); }
+    .vc-teal { background: rgba(0,229,196,0.15); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HOW IT WORKS — Step Process
+    ═══════════════════════════════════════════════════════════════ */
+    .how-it-works {
+      padding: 100px 0;
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .how-it-works-header { text-align: center; margin-bottom: 80px; }
+    .how-it-works-header h2 {
+      font-family: var(--font-display); font-size: clamp(28px, 4vw, 48px);
+      font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px;
+    }
+    .how-it-works-header p {
+      font-size: 16px; color: var(--muted2); max-width: 480px;
+      margin: 0 auto; font-weight: 300;
+    }
+
+    .steps-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+      position: relative;
+    }
+    .steps-grid::before {
+      content: ''; position: absolute; top: 40px;
+      left: calc(12.5% + 12px); right: calc(12.5% + 12px);
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent3), var(--accent4), var(--accent2));
+      opacity: 0.2;
+    }
+
+    .step {
+      text-align: center; position: relative;
+    }
+    .step-number {
+      width: 56px; height: 56px; border-radius: 16px;
+      background: var(--surface); border: 1px solid var(--border2);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: 20px; font-weight: 700;
+      color: var(--accent); margin: 0 auto 20px;
+      position: relative; z-index: 2;
+      transition: all 0.3s var(--ease);
+    }
+    .step:hover .step-number {
+      background: var(--accent); color: #080a0e;
+      box-shadow: 0 0 24px rgba(245,200,66,0.3);
+      transform: scale(1.1);
+    }
+    .step h4 {
+      font-family: var(--font-display); font-size: 16px; font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .step p {
+      font-size: 13px; color: var(--muted2); font-weight: 300;
+      line-height: 1.6;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       METRICS — Animated stats showcase
+    ═══════════════════════════════════════════════════════════════ */
+    .metrics {
+      padding: 100px 0 120px;
+    }
+    .metrics-header { text-align: center; margin-bottom: 60px; }
+    .metrics-header h2 {
+      font-family: var(--font-display); font-size: clamp(28px, 4vw, 48px);
+      font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px;
+    }
+    .metrics-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    }
+    .metric-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 32px 24px; text-align: center;
+      position: relative; overflow: hidden;
+      transition: all 0.4s var(--ease);
+    }
+    .metric-box::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+      height: 3px; background: var(--mb-color, var(--accent));
+      border-radius: 0 0 20px 20px; opacity: 0.5;
+    }
+    .metric-box:hover {
+      border-color: var(--border2); transform: translateY(-4px);
+    }
+    .metric-box-icon {
+      font-size: 28px; margin-bottom: 16px;
+    }
+    .metric-box-value {
+      font-family: var(--font-mono); font-size: 36px; font-weight: 700;
+      line-height: 1; margin-bottom: 8px;
+      background: linear-gradient(135deg, var(--text) 0%, var(--muted2) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .metric-box-label {
+      font-size: 13px; color: var(--muted); font-weight: 400;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FEEDBACK SECTION
+    ═══════════════════════════════════════════════════════════════ */
+    .feedback-section {
+      padding: 100px 0 120px;
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .feedback-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .feedback-inner { grid-template-columns: 1fr; gap: 40px; }
+    }
+
+    /* Left — form */
+    .feedback-form-wrap { }
+    .feedback-form-wrap h2 {
+      font-family: var(--font-display); font-size: clamp(26px, 3.5vw, 40px);
+      font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px;
+    }
+    .feedback-form-wrap .sub {
+      font-size: 15px; color: var(--muted2); font-weight: 300;
+      line-height: 1.6; margin-bottom: 32px;
+    }
+    .fb-field { margin-bottom: 16px; }
+    .fb-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    .fb-label {
+      display: block; font-family: var(--font-mono); font-size: 9px;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 7px;
+    }
+    .fb-input, .fb-textarea, .fb-select {
+      width: 100%; background: var(--surface);
+      border: 1px solid var(--border2); border-radius: 10px;
+      padding: 12px 16px; font-family: var(--font-body);
+      font-size: 14px; color: var(--text); outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      appearance: none; -webkit-appearance: none;
+    }
+    .fb-input::placeholder, .fb-textarea::placeholder { color: var(--muted); }
+    .fb-input:focus, .fb-textarea:focus, .fb-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(245,200,66,0.12);
+    }
+    .fb-textarea { resize: vertical; min-height: 110px; line-height: 1.6; }
+    .fb-select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a7f9a' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 14px center;
+      background-color: var(--surface); cursor: pointer;
+    }
+    .fb-select option { background: var(--surface); color: var(--text); }
+
+    /* Star rating */
+    .star-row { display: flex; gap: 6px; margin-bottom: 20px; }
+    .star-btn {
+      font-size: 26px; background: none; border: none;
+      cursor: pointer; transition: transform 0.15s;
+      filter: grayscale(1) opacity(0.35);
+      line-height: 1;
+    }
+    .star-btn.active { filter: none; transform: scale(1.15); }
+    .star-btn:hover  { filter: none; transform: scale(1.2); }
+
+    .fb-submit {
+      width: 100%; padding: 14px; background: var(--accent); color: #080a0e;
+      font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      border: none; border-radius: 10px; cursor: pointer;
+      transition: all 0.25s var(--ease); margin-top: 4px;
+    }
+    .fb-submit:hover  { background: #ffd55e; transform: translateY(-2px); box-shadow: 0 8px 28px rgba(245,200,66,0.25); }
+    .fb-submit:active { transform: translateY(0); }
+    .fb-submit:disabled { background: var(--surface3); color: var(--muted); cursor: not-allowed; transform: none; }
+
+    .fb-toast {
+      display: none; margin-top: 14px; padding: 12px 16px;
+      background: rgba(61,220,132,0.08); border: 1px solid rgba(61,220,132,0.2);
+      border-radius: 10px; font-size: 13px;
+      color: #3ddc84; font-family: var(--font-mono);
+      animation: fadeInUp 0.4s var(--ease);
+    }
+
+    /* Right — live feed */
+    .feedback-feed-wrap { }
+    .feedback-feed-wrap h3 {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .feedback-feed-wrap h3::before {
+      content: ''; width: 3px; height: 12px; background: var(--accent); border-radius: 2px;
+    }
+    .feed-list {
+      display: flex; flex-direction: column; gap: 14px;
+      max-height: 560px; overflow-y: auto;
+      scrollbar-width: thin; scrollbar-color: var(--surface3) transparent;
+      padding-right: 4px;
+    }
+    .feed-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px;
+      transition: border-color 0.25s;
+      animation: feedCardIn 0.5s var(--ease);
+    }
+    @keyframes feedCardIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .feed-card:hover { border-color: var(--border2); }
+    .feed-card-top {
+      display: flex; align-items: flex-start;
+      justify-content: space-between; gap: 10px; margin-bottom: 10px;
+    }
+    .feed-card-author {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .feed-avatar {
+      width: 34px; height: 34px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+    .feed-name {
+      font-size: 13px; font-weight: 600; color: var(--text);
+    }
+    .feed-role {
+      font-size: 11px; color: var(--muted); margin-top: 1px;
+    }
+    .feed-meta {
+      text-align: right; flex-shrink: 0;
+    }
+    .feed-stars { color: var(--accent); font-size: 12px; letter-spacing: 1px; }
+    .feed-time  {
+      font-family: var(--font-mono); font-size: 9px;
+      color: var(--muted); margin-top: 3px;
+    }
+    .feed-category {
+      display: inline-block; font-family: var(--font-mono); font-size: 8px;
+      letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px;
+      border-radius: 100px; margin-bottom: 10px;
+    }
+    .cat-ux      { background: rgba(99,102,241,0.12); color: var(--accent4); border: 1px solid rgba(99,102,241,0.2); }
+    .cat-model   { background: rgba(0,229,196,0.10);  color: var(--accent3); border: 1px solid rgba(0,229,196,0.18); }
+    .cat-feature { background: rgba(245,200,66,0.10); color: var(--accent);  border: 1px solid rgba(245,200,66,0.18); }
+    .cat-general { background: rgba(255,255,255,0.05);color: var(--muted2);  border: 1px solid var(--border); }
+    .feed-text {
+      font-size: 13px; color: var(--text2); line-height: 1.65;
+      font-weight: 300;
+    }
+    .feed-empty {
+      text-align: center; padding: 48px 20px;
+      color: var(--muted); font-size: 13px;
+    }
+    .feed-empty-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.4; }
+
+    .feed-count {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--muted); margin-bottom: 14px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .feed-count-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--low);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════════════════════
+       CTA SECTION
+    ═══════════════════════════════════════════════════════════════ */
+    .cta-section {
+      padding: 100px 0;
+    }
+    .cta-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 32px; padding: 80px 60px;
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .cta-box::before {
+      content: ''; position: absolute; top: -200px; left: 50%;
+      transform: translateX(-50%); width: 600px; height: 400px;
+      background: radial-gradient(ellipse, rgba(245,200,66,0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-box h2 {
+      font-family: var(--font-display); font-size: clamp(28px, 4vw, 44px);
+      font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px;
+      position: relative; z-index: 1;
+    }
+    .cta-box p {
+      font-size: 16px; color: var(--muted2); max-width: 480px;
+      margin: 0 auto 36px; font-weight: 300;
+      position: relative; z-index: 1;
+    }
+    .cta-box .btn-primary { position: relative; z-index: 1; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FOOTER — Hover interactive footer
+    ═══════════════════════════════════════════════════════════════ */
+    .footer {
+      border-top: 1px solid var(--border);
+      padding: 80px 0 40px;
+      background: var(--bg2);
+    }
+    .footer-grid {
+      display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 40px; margin-bottom: 60px;
+    }
+    .footer-brand { }
+    .footer-brand .logo { margin-bottom: 16px; }
+    .footer-brand p {
+      font-size: 14px; color: var(--muted2); line-height: 1.7;
+      font-weight: 300; max-width: 280px;
+    }
+    .footer-col h4 {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
+    }
+    .footer-col ul { list-style: none; }
+    .footer-col li { margin-bottom: 12px; }
+    .footer-col a {
+      font-size: 14px; color: var(--muted2); font-weight: 400;
+      transition: all 0.3s; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .footer-col a::before {
+      content: ''; width: 0; height: 2px; background: var(--accent);
+      border-radius: 2px; transition: width 0.3s var(--ease);
+    }
+    .footer-col a:hover {
+      color: var(--text); transform: translateX(4px);
+    }
+    .footer-col a:hover::before { width: 12px; }
+
+    .footer-bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 24px; border-top: 1px solid var(--border);
+    }
+    .footer-copy {
+      font-size: 12px; color: var(--muted); font-weight: 300;
+    }
+    .footer-socials {
+      display: flex; gap: 12px;
+    }
+    .footer-social {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; transition: all 0.3s var(--ease);
+    }
+    .footer-social:hover {
+      border-color: var(--accent); background: rgba(245,200,66,0.08);
+      transform: translateY(-3px);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SCROLL ANIMATIONS
+    ═══════════════════════════════════════════════════════════════ */
+    .reveal {
+      opacity: 0; transform: translateY(30px);
+      transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+    }
+    .reveal.visible {
+      opacity: 1; transform: translateY(0);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════════════════════ */
+    @media (max-width: 1024px) {
+      .features-grid { grid-template-columns: 1fr 1fr; }
+      .feature-card.wide { grid-column: span 2; }
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps-grid { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+      .steps-grid::before { display: none; }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 768px) {
+      .nav-links, .nav-cta { display: none; }
+      .mobile-menu-btn { display: flex; }
+      .features-grid { grid-template-columns: 1fr; }
+      .feature-card.wide { grid-column: span 1; }
+      .feature-card.wide .feature-inner { grid-template-columns: 1fr; }
+      .testimonials-columns { grid-template-columns: 1fr; }
+      .testimonial-col:nth-child(2) { margin-top: 0; }
+      .testimonial-col:nth-child(3) { display: none; }
+      .hero-stats { gap: 24px; flex-wrap: wrap; }
+      .hero-stat-value { font-size: 24px; }
+      .stat-divider { display: none; }
+      .slider-wrapper { padding: 32px 24px; }
+      .cta-box { padding: 48px 24px; }
+      .steps-grid { grid-template-columns: 1fr; }
+      .footer-grid { grid-template-columns: 1fr; }
+      .footer-bottom { flex-direction: column; gap: 16px; text-align: center; }
+    }
+
+    @media (max-width: 480px) {
+      .metrics-grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 32px; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CHATBOT — Road Safety Assistant
+    ═══════════════════════════════════════════════════════════════ */
+
+    /* Floating launcher button */
+    #chatLauncher {
+      position: fixed; bottom: 28px; right: 28px; z-index: 9000;
+      width: 58px; height: 58px; border-radius: 50%;
+      background: var(--accent); color: #080a0e;
+      border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 24px rgba(245,200,66,0.40);
+      transition: all 0.3s var(--ease);
+      font-size: 24px;
+    }
+    #chatLauncher:hover {
+      transform: scale(1.1);
+      box-shadow: 0 8px 36px rgba(245,200,66,0.55);
+    }
+    #chatLauncher .chat-badge {
+      position: absolute; top: -3px; right: -3px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--accent2); border: 2px solid var(--bg);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    /* Chat window */
+    #chatWindow {
+      position: fixed; bottom: 100px; right: 28px; z-index: 8999;
+      width: 380px; max-height: 580px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transform: scale(0.92) translateY(16px);
+      opacity: 0; pointer-events: none;
+      transition: all 0.35s var(--ease);
+    }
+    #chatWindow.open {
+      transform: scale(1) translateY(0);
+      opacity: 1; pointer-events: all;
+    }
+    @media (max-width: 480px) {
+      #chatWindow { width: calc(100vw - 32px); right: 16px; bottom: 90px; }
+    }
+
+    /* Header */
+    .chat-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 18px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .chat-header-avatar {
+      width: 38px; height: 38px; border-radius: 12px;
+      background: var(--accent); display: flex;
+      align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .chat-header-info { flex: 1; }
+    .chat-header-name {
+      font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+      color: var(--text); letter-spacing: 0.04em;
+    }
+    .chat-header-status {
+      font-size: 11px; color: var(--muted2); margin-top: 1px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .chat-header-status::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--low); flex-shrink: 0;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    .chat-close {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--surface3); border: 1px solid var(--border);
+      color: var(--muted2); display: flex; align-items: center;
+      justify-content: center; font-size: 14px;
+      cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+    }
+    .chat-close:hover { background: rgba(255,92,92,0.12); color: var(--accent2); border-color: rgba(255,92,92,0.25); }
+
+    /* Quick questions chips */
+    .chat-chips {
+      display: flex; flex-wrap: wrap; gap: 7px;
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface);
+    }
+    .chat-chip {
+      font-family: var(--font-mono); font-size: 9px;
+      letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--accent); background: rgba(245,200,66,0.07);
+      border: 1px solid rgba(245,200,66,0.22);
+      border-radius: 100px; padding: 5px 11px;
+      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .chat-chip:hover {
+      background: rgba(245,200,66,0.14);
+      border-color: rgba(245,200,66,0.45);
+      transform: translateY(-1px);
+    }
+
+    /* Messages area */
+    .chat-messages {
+      flex: 1; overflow-y: auto; padding: 16px 14px;
+      display: flex; flex-direction: column; gap: 12px;
+      scrollbar-width: thin; scrollbar-color: var(--surface3) transparent;
+    }
+
+    /* Individual message bubbles */
+    .chat-msg {
+      display: flex; gap: 8px; align-items: flex-end;
+      animation: msgIn 0.3s var(--ease);
+    }
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .chat-msg.user { flex-direction: row-reverse; }
+    .msg-avatar {
+      width: 28px; height: 28px; border-radius: 9px;
+      background: var(--surface3); display: flex;
+      align-items: center; justify-content: center;
+      font-size: 13px; flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+    .chat-msg.user .msg-avatar { background: var(--accent); }
+    .msg-bubble {
+      max-width: 82%; padding: 10px 14px;
+      border-radius: 14px; font-size: 13px;
+      line-height: 1.55; position: relative;
+    }
+    .chat-msg.bot .msg-bubble {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-bottom-left-radius: 4px;
+    }
+    .chat-msg.user .msg-bubble {
+      background: var(--accent);
+      color: #080a0e; font-weight: 500;
+      border-bottom-right-radius: 4px;
+    }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: flex; gap: 4px; align-items: center;
+      padding: 10px 14px;
+    }
+    .typing-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--muted); animation: typing-bounce 1.2s ease-in-out infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing-bounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    /* Contact card inside message */
+    .contact-card {
+      margin-top: 10px; padding: 10px 12px;
+      background: var(--surface3); border-radius: 10px;
+      border: 1px solid var(--border2);
+    }
+    .contact-card-title {
+      font-family: var(--font-mono); font-size: 9px;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 6px;
+    }
+    .contact-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; margin-bottom: 4px; color: var(--text);
+    }
+    .contact-row:last-child { margin-bottom: 0; }
+
+    /* Input bar */
+    .chat-input-bar {
+      display: flex; gap: 8px; align-items: center;
+      padding: 12px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--surface2);
+      flex-shrink: 0;
+    }
+    #chatInput {
+      flex: 1; background: var(--surface3);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 9px 13px; font-family: var(--font-body);
+      font-size: 13px; color: var(--text); outline: none;
+      transition: border-color 0.2s;
+    }
+    #chatInput::placeholder { color: var(--muted); }
+    #chatInput:focus { border-color: rgba(245,200,66,0.4); }
+    #chatSend {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--accent); border: none;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+    }
+    #chatSend:hover { background: #ffd55e; transform: scale(1.06); }
+    #chatSend svg { width: 16px; height: 16px; color: #080a0e; }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       HEADER
+  ═══════════════════════════════════════════════════════════ -->
+  <header class="header" id="header">
+    <div class="header-inner">
+      <a href="#" class="logo">
+        <div class="logo-icon">🛣️</div>
+        <span class="logo-text">POTHOLE<span>INTEL</span></span>
+      </a>
+      <nav class="nav">
+        <ul class="nav-links">
+          <li><a href="#features" data-i18n="navFeatures">Features</a></li>
+          <li><a href="#how-it-works" data-i18n="navHowItWorks">How It Works</a></li>
+          <li><a href="#metrics" data-i18n="navMetrics">Metrics</a></li>
+          <li><a href="#testimonials" data-i18n="navFeedback">Testimonials</a></li>
+        </ul>
+        <div class="controls-bar">
+          <select class="lang-select" id="langSelect" aria-label="Language">
+            <option value="en">🇬🇧 EN</option>
+            <option value="kn">🇮🇳 ಕನ್ನಡ</option>
+          </select>
+          <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+        </div>
+        <a href="final_dashboard.html" class="nav-cta" data-i18n="launchDashboard">Launch Dashboard →</a>
+      </nav>
+      <div class="mobile-menu-btn" id="mobileMenuBtn">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       HERO
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="hero section" id="hero">
+    <div class="hero-shapes">
+      <div class="shape shape-1"></div>
+      <div class="shape shape-2"></div>
+      <div class="shape shape-3"></div>
+      <div class="shape shape-4"></div>
+      <div class="hero-geo hero-geo-1"></div>
+      <div class="hero-geo hero-geo-2"></div>
+      <div class="hero-geo hero-geo-3"></div>
+      <div class="scan-line"></div>
+    </div>
+
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        <span data-i18n="heroBadge">YOLOv11 · Road Intelligence System</span>
+      </div>
+      <h1>
+        <span data-i18n="heroLine1">Detect. Assess.</span>
+        <span class="line-2"><span class="gradient-text" data-i18n="heroLine2">Prioritise Repairs.</span></span>
+      </h1>
+      <p class="hero-sub" data-i18n="heroSubLanding">
+        AI-powered pothole detection and repair prioritisation for smarter Indian road infrastructure. Upload, scan, act.
+      </p>
+      <div class="hero-actions">
+        <a href="final_dashboard.html" class="btn-primary" data-i18n="launchDashboardBtn">
+          ⚡ Launch Dashboard
+        </a>
+        <a href="#how-it-works" class="btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          <span data-i18n="heroSeeHow">See How It Works</span>
+        </a>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-value">78.4<span class="accent">%</span></div>
+          <div class="hero-stat-label" data-i18n="statMap">mAP@0.5 Accuracy</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="hero-stat">
+          <div class="hero-stat-value"><span class="accent">&lt;</span>50<span class="accent">ms</span></div>
+          <div class="hero-stat-label" data-i18n="statSpeed">Inference Speed</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">100<span class="accent">+</span></div>
+          <div class="hero-stat-label" data-i18n="statEpochs">Epochs Trained</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FEATURES
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="features section" id="features">
+    <div class="container">
+      <div class="features-header reveal">
+        <div class="section-label" data-i18n="featLabel">Core Capabilities</div>
+        <h2 data-i18n="featHeading">Intelligent Road Analysis</h2>
+        <p data-i18n="featSub">A complete AI pipeline from detection to repair prioritisation, built for Indian roads.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card reveal" style="--fc-color: var(--accent);">
+          <div class="feature-icon">🎯</div>
+          <h3 data-i18n="feat1Title">YOLOv11 Detection</h3>
+          <p data-i18n="feat1Desc">State-of-the-art object detection trained on custom Indian road datasets identifies potholes with high precision and recall.</p>
+        </div>
+
+        <div class="feature-card reveal" style="--fc-color: var(--accent3);">
+          <div class="feature-icon">📊</div>
+          <h3 data-i18n="feat2Title">RICE Scoring Model</h3>
+          <p data-i18n="feat2Desc">Prioritise repairs using Reach, Impact, Confidence, and Effort scoring — data-driven decisions for municipal budgets.</p>
+        </div>
+
+        <div class="feature-card reveal" style="--fc-color: var(--accent2);">
+          <div class="feature-icon">🗺️</div>
+          <h3 data-i18n="feat3Title">Risk Zone Mapping</h3>
+          <p data-i18n="feat3Desc">Interactive Bengaluru map with risk zone overlays and live detection markers. Visualise infrastructure health at a glance.</p>
+        </div>
+
+        <div class="feature-card wide reveal" style="--fc-color: var(--accent4);">
+          <div class="feature-inner">
+            <div>
+              <div class="feature-icon">⚡</div>
+              <h3 data-i18n="feat4Title">Severity Assessment Engine</h3>
+              <p data-i18n="feat4Desc">Automatic severity scoring from 1–5, repair type recommendation, cost estimation in INR, and priority classification — all in real-time after each scan.</p>
+            </div>
+            <div class="feature-visual">
+              <div class="visual-grid">
+                <div class="visual-cell"><div class="visual-cell-inner vc-red"></div></div>
+                <div class="visual-cell"><div class="visual-cell-inner vc-yellow"></div></div>
+                <div class="visual-cell"><div class="visual-cell-inner vc-green"></div></div>
+                <div class="visual-cell"><div class="visual-cell-inner vc-yellow"></div></div>
+                <div class="visual-cell"><div class="visual-cell-inner vc-teal"></div></div>
+                <div class="visual-cell"><div class="visual-cell-inner vc-red"></div></div>
+                <div class="visual-cell"><div class="visual-cell-inner vc-blue"></div></div>
+                <div class="visual-cell"><div class="visual-cell-inner vc-green"></div></div>
+                <div class="visual-cell"><div class="visual-cell-inner vc-yellow"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature-card reveal" style="--fc-color: #3ddc84;">
+          <div class="feature-icon">📷</div>
+          <h3 data-i18n="feat5Title">Image &amp; Video Input</h3>
+          <p data-i18n="feat5Desc">Upload road images or video clips. Frame scrubbing for videos lets you pinpoint the exact moment for analysis.</p>
+        </div>
+
+        <div class="feature-card reveal" style="--fc-color: var(--accent);">
+          <div class="feature-icon">📈</div>
+          <h3 data-i18n="feat6Title">Model Analytics</h3>
+          <p data-i18n="feat6Desc">Live dashboard with mAP, precision, recall, F1 score, and confusion matrix — full training transparency.</p>
+        </div>
+
+        <div class="feature-card reveal" style="--fc-color: var(--accent3);">
+          <div class="feature-icon">💰</div>
+          <h3 data-i18n="feat7Title">Cost Estimation</h3>
+          <p data-i18n="feat7Desc">Automated repair cost estimation in Indian Rupees based on severity, area coverage, and repair type classification.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       HOW IT WORKS
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="how-it-works section" id="how-it-works">
+    <div class="container">
+      <div class="how-it-works-header reveal">
+        <div class="section-label" data-i18n="howLabel">Process</div>
+        <h2 data-i18n="howHeading">How It Works</h2>
+        <p data-i18n="howSub">From upload to actionable repair report in seconds.</p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step reveal">
+          <div class="step-number">01</div>
+          <h4 data-i18n="step1Title">Upload</h4>
+          <p data-i18n="step1Desc">Drop a road image or video clip. Supports JPG, PNG, WEBP, MP4 — up to 64 MB.</p>
+        </div>
+        <div class="step reveal">
+          <div class="step-number">02</div>
+          <h4 data-i18n="step2Title">Detect</h4>
+          <p data-i18n="step2Desc">YOLOv11 runs inference in &lt;50ms, drawing bounding boxes with confidence scores.</p>
+        </div>
+        <div class="step reveal">
+          <div class="step-number">03</div>
+          <h4 data-i18n="step3Title">Assess</h4>
+          <p data-i18n="step3Desc">Severity engine calculates damage level, repair type, cost estimate, and RICE priority score.</p>
+        </div>
+        <div class="step reveal">
+          <div class="step-number">04</div>
+          <h4 data-i18n="step4Title">Prioritise</h4>
+          <p data-i18n="step4Desc">Results plotted on the Bengaluru risk map. Repairs ranked by urgency for municipal action.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       METRICS
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="metrics section" id="metrics">
+    <div class="container">
+      <div class="metrics-header reveal">
+        <div class="section-label" data-i18n="metricsLabel">Performance</div>
+        <h2 data-i18n="metricsHeading">Model Performance</h2>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-box reveal" style="--mb-color: var(--accent);">
+          <div class="metric-box-icon">🎯</div>
+          <div class="metric-box-value" data-target="78.4">0</div>
+          <div class="metric-box-label" data-i18n="metricMap">mAP@0.5 (%)</div>
+        </div>
+        <div class="metric-box reveal" style="--mb-color: var(--accent3);">
+          <div class="metric-box-icon">🔬</div>
+          <div class="metric-box-value" data-target="81.2">0</div>
+          <div class="metric-box-label" data-i18n="metricPrec">Precision (%)</div>
+        </div>
+        <div class="metric-box reveal" style="--mb-color: #3ddc84;">
+          <div class="metric-box-icon">📡</div>
+          <div class="metric-box-value" data-target="76.3">0</div>
+          <div class="metric-box-label" data-i18n="metricRecall">Recall (%)</div>
+        </div>
+        <div class="metric-box reveal" style="--mb-color: var(--accent2);">
+          <div class="metric-box-icon">⚡</div>
+          <div class="metric-box-value" data-target="78.7">0</div>
+          <div class="metric-box-label" data-i18n="metricF1">F1 Score (%)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FEEDBACK SECTION
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="feedback-section section" id="feedback">
+    <div class="container">
+      <div class="feedback-inner">
+
+        <!-- LEFT — Submit form -->
+        <div class="feedback-form-wrap reveal">
+          <div class="section-label" data-i18n="fbLabel">Community Feedback</div>
+          <h2 data-i18n="fbHeading">Share Your Thoughts</h2>
+          <p class="sub"><span data-i18n="fbSub">Tried PotholeIntel? We’d love to hear what you think — your feedback helps shape the next version.</span></p>
+
+          <!-- Star rating -->
+          <div class="fb-label" data-i18n="fbRatingLabel">Your Rating</div>
+          <div class="star-row" id="starRow">
+            <button class="star-btn" data-val="1">⭐</button>
+            <button class="star-btn" data-val="2">⭐</button>
+            <button class="star-btn" data-val="3">⭐</button>
+            <button class="star-btn" data-val="4">⭐</button>
+            <button class="star-btn" data-val="5">⭐</button>
+          </div>
+
+          <div class="fb-row">
+            <div>
+              <label class="fb-label" data-i18n="fbNameLabel">Name</label>
+              <input class="fb-input" id="fbName" type="text" placeholder="Your name" data-i18n-placeholder="fbNamePh" />
+            </div>
+            <div>
+              <label class="fb-label" data-i18n="fbRoleLabel">Role</label>
+              <input class="fb-input" id="fbRole" type="text" placeholder="e.g. Student, Engineer" data-i18n-placeholder="fbRolePh" />
+            </div>
+          </div>
+
+          <div class="fb-field">
+            <label class="fb-label" data-i18n="fbCatLabel">Category</label>
+            <select class="fb-select" id="fbCategory">
+              <option value="general">General</option>
+              <option value="model">Model Accuracy</option>
+              <option value="ux">UI / UX</option>
+              <option value="feature">Feature Request</option>
+            </select>
+          </div>
+
+          <div class="fb-field">
+            <label class="fb-label" data-i18n="fbTextLabel">Your Feedback</label>
+            <textarea class="fb-textarea" id="fbText" placeholder="Tell us what worked well, what could be better, or what you’d like to see next…" data-i18n-placeholder="fbTextPh"></textarea>
+          </div>
+
+          <button class="fb-submit" id="fbSubmit" data-i18n="fbSubmitBtn">⭐ Submit Feedback</button>
+          <div class="fb-toast" id="fbToast" data-i18n="fbToast">✓ Thank you! Your feedback has been posted.</div>
+        </div>
+
+        <!-- RIGHT — Live feed -->
+        <div class="feedback-feed-wrap reveal">
+          <h3 data-i18n="fbFeedTitle">Live Feedback Feed</h3>
+          <div class="feed-count" id="feedCount">
+            <span class="feed-count-dot"></span>
+            <span id="feedCountText">0 responses</span>
+          </div>
+          <div class="feed-list" id="feedList">
+            <div class="feed-empty" id="feedEmpty">
+              <div class="feed-empty-icon">💬</div>
+              <div data-i18n="fbEmpty">No feedback yet — be the first to share!</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CTA
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="cta-section section">
+    <div class="container">
+      <div class="cta-box reveal">
+        <div class="section-label" data-i18n="ctaLabel">Get Started</div>
+        <h2 data-i18n="ctaHeading">Ready to Scan Your Roads?</h2>
+        <p data-i18n="ctaSub">Upload your first road image and receive a complete severity assessment in under a minute.</p>
+        <a href="final_dashboard.html" class="btn-primary" data-i18n="openDashboard">⚡ Open the Dashboard</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FOOTER
+  ═══════════════════════════════════════════════════════════ -->
+  <footer class="footer section">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="#" class="logo">
+            <div class="logo-icon">🛣️</div>
+            <span class="logo-text">POTHOLE<span>INTEL</span></span>
+          </a>
+          <p data-i18n="footerBrand">AI-powered road intelligence for smarter infrastructure decisions. Built with YOLOv11 and ❤️ for Indian roads.</p>
+        </div>
+        <div class="footer-col">
+          <h4 data-i18n="footerProduct">Product</h4>
+          <ul>
+            <li><a href="final_dashboard.html">Dashboard</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#metrics">Metrics</a></li>
+            <li><a href="#how-it-works">How It Works</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4 data-i18n="footerTech">Technology</h4>
+          <ul>
+            <li><a href="#">YOLOv11</a></li>
+            <li><a href="#">Flask API</a></li>
+            <li><a href="#">Leaflet Maps</a></li>
+            <li><a href="#">RICE Framework</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4 data-i18n="footerProject">Project</h4>
+          <ul>
+            <li><a href="#">IIMSTC Cohort 12</a></li>
+            <li><a href="#">DSML Track</a></li>
+            <li><a href="#">Documentation</a></li>
+            <li><a href="#">GitHub</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span class="footer-copy" data-i18n="footerCopy">© 2026 PotholeIntel · IIMSTC Cohort 12 DSML Project</span>
+        <div class="footer-socials">
+          <a href="#" class="footer-social" aria-label="GitHub">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          </a>
+          <a href="#" class="footer-social" aria-label="LinkedIn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          </a>
+          <a href="#" class="footer-social" aria-label="Twitter">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCRIPTS
+  ═══════════════════════════════════════════════════════════ -->
+  <script>
+    // ── Header scroll effect ──────────────────────────────────
+    const header = document.getElementById('header');
+    window.addEventListener('scroll', () => {
+      header.classList.toggle('scrolled', window.scrollY > 60);
+    });
+
+    // ── Scroll reveal animations ──────────────────────────────
+    const revealElements = document.querySelectorAll('.reveal');
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry, i) => {
+        if (entry.isIntersecting) {
+          setTimeout(() => {
+            entry.target.classList.add('visible');
+          }, i * 80);
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    revealElements.forEach(el => revealObserver.observe(el));
+
+    // ── Animated counter for metrics ──────────────────────────
+    const counterElements = document.querySelectorAll('.metric-box-value[data-target]');
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const el = entry.target;
+          const target = parseFloat(el.dataset.target);
+          const duration = 2000;
+          const startTime = performance.now();
+
+          function updateCounter(now) {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 4); // easeOutQuart
+            const current = (target * eased).toFixed(1);
+            el.textContent = current;
+            if (progress < 1) requestAnimationFrame(updateCounter);
+            else el.textContent = target.toFixed(1);
+          }
+          requestAnimationFrame(updateCounter);
+          counterObserver.unobserve(el);
+        }
+      });
+    }, { threshold: 0.5 });
+    counterElements.forEach(el => counterObserver.observe(el));
+
+    // ── Testimonial slider ────────────────────────────────────
+    const slides = document.querySelectorAll('.slide');
+    const dots = document.querySelectorAll('.slider-dot');
+    let currentSlide = 0;
+    let autoPlayInterval;
+
+    function goToSlide(index) {
+      slides[currentSlide].classList.remove('active');
+      dots[currentSlide].classList.remove('active');
+      currentSlide = index;
+      slides[currentSlide].classList.add('active');
+      dots[currentSlide].classList.add('active');
+    }
+
+    dots.forEach(dot => {
+      dot.addEventListener('click', () => {
+        goToSlide(parseInt(dot.dataset.index));
+        resetAutoPlay();
+      });
+    });
+
+    function autoPlay() {
+      autoPlayInterval = setInterval(() => {
+        goToSlide((currentSlide + 1) % slides.length);
+      }, 5000);
+    }
+
+    function resetAutoPlay() {
+      clearInterval(autoPlayInterval);
+      autoPlay();
+    }
+
+    autoPlay();
+
+    // ── Smooth scroll for nav links ───────────────────────────
+    document.querySelectorAll('a[href^="#"]').forEach(link => {
+      link.addEventListener('click', (e) => {
+        const targetId = link.getAttribute('href');
+        if (targetId === '#') return;
+        e.preventDefault();
+        const target = document.querySelector(targetId);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    // ── Mobile menu (simple toggle) ───────────────────────────
+    const mobileBtn = document.getElementById('mobileMenuBtn');
+    mobileBtn.addEventListener('click', () => {
+      const navLinks = document.querySelector('.nav-links');
+      const navCta = document.querySelector('.nav-cta');
+      const isVisible = navLinks.style.display === 'flex';
+      navLinks.style.display = isVisible ? 'none' : 'flex';
+      navLinks.style.position = isVisible ? '' : 'absolute';
+      navLinks.style.top = isVisible ? '' : '60px';
+      navLinks.style.left = isVisible ? '' : '0';
+      navLinks.style.right = isVisible ? '' : '0';
+      navLinks.style.flexDirection = isVisible ? '' : 'column';
+      navLinks.style.background = isVisible ? '' : 'rgba(5,7,9,0.98)';
+      navLinks.style.padding = isVisible ? '' : '20px';
+      navLinks.style.gap = isVisible ? '' : '16px';
+      navLinks.style.borderBottom = isVisible ? '' : '1px solid var(--border)';
+      navLinks.style.zIndex = '100';
+      if (navCta) {
+        navCta.style.display = isVisible ? 'none' : 'inline-flex';
+        navCta.style.position = isVisible ? '' : 'absolute';
+        navCta.style.top = isVisible ? '' : `${60 + navLinks.scrollHeight + 10}px`;
+        navCta.style.right = '20px';
+      }
+    });
+
+    // ══════════════════════════════════════════════════════════════
+    //  THEME TOGGLE
+    // ══════════════════════════════════════════════════════════════
+    const themeToggle = document.getElementById('themeToggle');
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('pi-theme', theme);
+      themeToggle.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+    themeToggle.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      setTheme(current === 'dark' ? 'light' : 'dark');
+    });
+    setTheme(localStorage.getItem('pi-theme') || 'dark');
+
+    // ══════════════════════════════════════════════════════════════
+    //  i18n — ENGLISH / KANNADA
+    // ══════════════════════════════════════════════════════════════
+    const LANDING_I18N = {
+      en: {
+        launchDashboard: 'Launch Dashboard →',
+        launchDashboardBtn: '⚡ Launch Dashboard',
+        heroSubLanding: 'AI-powered pothole detection and repair prioritisation for smarter Indian road infrastructure. Upload, scan, act.',
+        openDashboard: '⚡ Open the Dashboard',
+      },
+      kn: {
+        launchDashboard: 'ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ತೆರೆಯಿರಿ →',
+        launchDashboardBtn: '⚡ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ತೆರೆಯಿರಿ',
+        heroSubLanding: 'AI-ಆಧಾರಿತ ಗುಂಡಿ ಪತ್ತೆ ಮತ್ತು ದುರಸ್ತಿ ಆದ್ಯತೆ — ಉತ್ತಮ ಭಾರತೀಯ ರಸ್ತೆ ಮೂಲಸೌಕರ್ಯಕ್ಕಾಗಿ. ಅಪ್‌ಲೋಡ್, ಸ್ಕ್ಯಾನ್, ಕ್ರಮ ಕೈಗೊಳ್ಳಿ.',
+        openDashboard: '⚡ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ತೆರೆಯಿರಿ',
+      }
+    };
+
+    let currentLang = localStorage.getItem('pi-lang') || 'en';
+    const langSelect = document.getElementById('langSelect');
+
+    function applyLanguage(lang) {
+      currentLang = lang;
+      localStorage.setItem('pi-lang', lang);
+      langSelect.value = lang;
+      const strings = LANDING_I18N[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (strings[key] && typeof strings[key] === 'string') {
+          el.innerHTML = strings[key];
+        }
+      });
+    }
+
+    langSelect.addEventListener('change', (e) => applyLanguage(e.target.value));
+    applyLanguage(currentLang);
+  </script>
+
+  <!-- chatbot HTML is below; chatbot JS runs after it in its own script tag -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CHATBOT — HTML  (must come before chatbot script)
+  ═══════════════════════════════════════════════════════════ -->
+  <button id="chatLauncher" aria-label="Open Road Safety Assistant">
+    🛣️
+    <span class="chat-badge"></span>
+  </button>
+
+  <div id="chatWindow" role="dialog" aria-label="Road Safety Assistant">
+    <div class="chat-header">
+      <div class="chat-header-avatar">🛣️</div>
+      <div class="chat-header-info">
+        <div class="chat-header-name">ROADBOT · SAFETY GUIDE</div>
+        <div class="chat-header-status">Online — Road Safety Assistant</div>
+      </div>
+      <button class="chat-close" id="chatClose" aria-label="Close chat">✕</button>
+    </div>
+    <div class="chat-chips">
+      <button class="chat-chip" data-q="How to get a pothole fixed?">🛠️ Get it Fixed</button>
+      <button class="chat-chip" data-q="How long will be the repair time?">⏱️ Repair Time</button>
+      <button class="chat-chip" data-q="Safety measures while driving on a damaged road?">🚗 Safety Tips</button>
+      <button class="chat-chip" data-q="What does repair cost?">💰 Repair Cost</button>
+      <button class="chat-chip" data-q="What is a severity score?">📊 Severity</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-bar">
+      <input type="text" id="chatInput" placeholder="Ask about road safety…" autocomplete="off" />
+      <button id="chatSend" aria-label="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CHATBOT — JS  (after HTML so getElementById works)
+  ═══════════════════════════════════════════════════════════ -->
+  <script>
+    const CHAT_KB = [
+      {
+        // ── How to report / get fixed ──────────────────────────
+        patterns: ['fix','report','complaint','complain','lodge','register','bbmp','bmc','contact authority','authority','government','who to call','whom to contact','how do i report'],
+        response: `To get a pothole fixed in Bengaluru, here are your best options:
+
+<div class="contact-card">
+  <div class="contact-card-title">📞 Report a Pothole</div>
+  <div class="contact-row">🏛️ <strong>BBMP Helpline</strong> — 1533 (toll-free, 24×7)</div>
+  <div class="contact-row">🌐 <strong>BBMP Portal</strong> — bbmpsahaaya.in</div>
+  <div class="contact-row">📱 <strong>Sahaaya App</strong> — Download from Play Store</div>
+  <div class="contact-row">🐦 <strong>Twitter / X</strong> — @BBMPCOMM with photo</div>
+  <div class="contact-row">📧 <strong>Email</strong> — complaints@bbmp.gov.in</div>
+</div>
+
+💡 <strong>Pro tip:</strong> Attach a clear photo of the pothole with GPS location when filing the complaint — it speeds up the response significantly.`
+      },
+      {
+        // ── Timeline / how long ─────────────────────────────────
+        patterns: ['how long','time','days','weeks','duration','response time','repair time','when','timeline','high severity','urgent'],
+        response: `Repair timelines in Bengaluru depend on <strong>severity level</strong>:
+
+<div class="contact-card">
+  <div class="contact-card-title">⏱️ Expected Repair Timelines</div>
+  <div class="contact-row">🔴 <strong>High Severity (Sev 4–5)</strong> — 48–72 hours (priority escalation)</div>
+  <div class="contact-row">🟡 <strong>Medium Severity (Sev 3)</strong> — 5–10 working days</div>
+  <div class="contact-row">🟢 <strong>Low Severity (Sev 1–2)</strong> — 15–30 working days</div>
+</div>
+
+If there is <strong>no response within 7 days</strong>, escalate to:
+• BBMP Commissioner office — 080-22660000
+• Karnataka Road Development Corporation — 1800-425-3456
+• Your local ward councillor via the BBMP ward office`
+      },
+      {
+        // ── Safety while driving ────────────────────────────────
+        patterns: ['safe','safety','driving','drive','car','vehicle','avoid','tips','precaution','damaged road','bad road','pothole road','tyre','tire'],
+        response: `Here are essential <strong>safety measures</strong> when driving on damaged roads:
+
+🚗 <strong>Before You Drive</strong>
+• Check tyre pressure — under-inflated tyres are more prone to damage
+• Slow down on roads you haven't driven before
+• Keep a tyre repair kit and spare tyre in the boot
+
+⚠️ <strong>While Driving</strong>
+• Maintain at least 3× your normal following distance on damaged roads
+• Grip the steering wheel firmly — avoid sudden swerves
+• If you can't avoid a pothole, release the brakes just before hitting it — locked wheels cause more rim damage
+• Hazard lights on if you need to slow suddenly
+
+🌧️ <strong>At Night / During Rain</strong>
+• Water-filled potholes are nearly invisible — reduce speed significantly
+• Use low-beam headlights for better road visibility
+• Avoid waterlogged areas — depth is impossible to judge
+
+🚑 <strong>After Hitting a Pothole</strong>
+• Check for tyre damage, wheel alignment, and suspension noises
+• Report the pothole using the BBMP app — it protects other drivers`
+      },
+      {
+        // ── Cost / repair cost ──────────────────────────────────
+        patterns: ['cost','price','expensive','cheap','estimate','rupee','inr','₹','money','budget','how much'],
+        response: `Our system estimates repair costs based on severity:
+
+<div class="contact-card">
+  <div class="contact-card-title">💰 Estimated Repair Costs (INR)</div>
+  <div class="contact-row">🟢 <strong>Minor patch (Sev 1–2)</strong> — ₹1,500 – ₹4,000 per pothole</div>
+  <div class="contact-row">🟡 <strong>Partial repair (Sev 3–4)</strong> — ₹5,000 – ₹12,000 per pothole</div>
+  <div class="contact-row">🔴 <strong>Full-depth repair (Sev 5)</strong> — ₹15,000 – ₹25,000 per pothole</div>
+</div>
+
+These figures are per-pothole estimates. Costs scale with the number of detections in a scan. The dashboard auto-calculates total estimated repair cost after each analysis.`
+      },
+      {
+        // ── What is severity ────────────────────────────────────
+        patterns: ['severity','sev','damage level','level','score','1','2','3','4','5','what is severity','what does severity mean'],
+        response: `Severity in PotholeIntel is a <strong>1–5 scale</strong> computed from the AI model output:
+
+<div class="contact-card">
+  <div class="contact-card-title">📊 Severity Scale</div>
+  <div class="contact-row">🟢 <strong>1–2 (Minor)</strong> — Surface cracking, small depressions</div>
+  <div class="contact-row">🟡 <strong>3 (Moderate)</strong> — Visible holes, tyre risk at speed</div>
+  <div class="contact-row">🔴 <strong>4–5 (Critical)</strong> — Deep craters, axle/suspension damage risk</div>
+</div>
+
+The score is calculated from: pothole count + detection confidence. Higher confidence + more detections = higher severity.`
+      },
+      {
+        // ── What is RICE ────────────────────────────────────────
+        patterns: ['rice','rice score','reach','impact','confidence','effort','priority formula','how is priority'],
+        response: `The <strong>RICE Score</strong> is a prioritisation framework used by PotholeIntel:
+
+• <strong>R — Reach</strong>: Estimated daily road users affected
+• <strong>I — Impact</strong>: Severity of damage on a 1–3 scale
+• <strong>C — Confidence</strong>: Model detection confidence (0–1)
+• <strong>E — Effort</strong>: Estimated repair person-weeks
+
+<strong>RICE Score = (Reach × Impact × Confidence) ÷ Effort</strong>
+
+A higher RICE score means the pothole should be <em>repaired sooner</em> — it affects more people with higher confidence.`
+      },
+      {
+        // ── What is PotholeIntel / this system ──────────────────
+        patterns: ['what is','what are','tell me about','about','potholeint','yolo','ai','model','how does it work','dashboard','detect'],
+        response: `<strong>PotholeIntel</strong> is an AI-powered road intelligence system built on <strong>YOLOv11</strong> for Final Year Project demonstration.
+
+🔍 <strong>How it works:</strong>
+1. Upload a road image or video frame
+2. YOLOv11 detects potholes and returns bounding boxes + confidence scores
+3. A rule-based engine computes severity (1–5), priority score (0–100), and repair cost
+4. The dashboard plots detections on a Bengaluru heatmap and charts priority distribution
+
+It is designed to help <strong>municipal authorities</strong> prioritise road repair budgets efficiently.`
+      },
+      {
+        // ── Emergency / accident ────────────────────────────────
+        patterns: ['accident','emergency','injured','hurt','crash','tyre burst','blowout','help','911','100'],
+        response: `🚨 <strong>In an emergency caused by a road hazard:</strong>
+
+<div class="contact-card">
+  <div class="contact-card-title">🆘 Emergency Contacts</div>
+  <div class="contact-row">🚑 <strong>Ambulance</strong> — 108</div>
+  <div class="contact-row">🚔 <strong>Police</strong> — 100</div>
+  <div class="contact-row">🚒 <strong>Fire & Rescue</strong> — 101</div>
+  <div class="contact-row">🛣️ <strong>NHAI Helpline</strong> — 1033 (highways)</div>
+</div>
+
+After the emergency, <strong>document the pothole</strong> with photos and file a compensation claim at your local BBMP ward office or through bbmpsahaaya.in — pothole damage claims are legally valid in India under Motor Vehicles Act.`
+      },
+    ];
+
+    // Fallback response
+    const FALLBACK = `I didn't quite catch that — here are some things I can help with:
+
+• 🛠️ <em>"How to get a pothole fixed?"</em>
+• ⏱️ <em>"How long does a repair take?"</em>
+• 🚗 <em>"Safety tips on damaged roads"</em>
+• 💰 <em>"What does repair cost?"</em>
+• 📊 <em>"What is a severity score?"</em>
+
+Click a chip above or type your question!`;
+
+    // Welcome message
+    const WELCOME = `👋 Hi! I'm <strong>RoadBot</strong>, your road safety guide.
+
+I can help you with:
+• Reporting potholes to authorities
+• Understanding repair timelines
+• Safety tips for damaged roads
+• Repair costs & severity scores
+
+Type a question below or tap a quick option above.`;
+
+    function matchResponse(input) {
+      const q = input.toLowerCase();
+      for (const item of CHAT_KB) {
+        if (item.patterns.some(p => q.includes(p))) return item.response;
+      }
+      return FALLBACK;
+    }
+
+    const launcher    = document.getElementById('chatLauncher');
+    const chatWindow  = document.getElementById('chatWindow');
+    const closeBtn    = document.getElementById('chatClose');
+    const messages    = document.getElementById('chatMessages');
+    const chatInput   = document.getElementById('chatInput');
+    const sendBtn     = document.getElementById('chatSend');
+    const chips       = document.querySelectorAll('.chat-chip');
+
+    let isOpen = false;
+    let welcomed = false;
+
+    function openChat() {
+      isOpen = true;
+      chatWindow.classList.add('open');
+      launcher.style.transform = 'scale(0.88)';
+      launcher.style.opacity   = '0.7';
+      chatInput.focus();
+      if (!welcomed) { welcomed = true; setTimeout(() => addBotMsg(WELCOME), 400); }
+    }
+
+    function closeChat() {
+      isOpen = false;
+      chatWindow.classList.remove('open');
+      launcher.style.transform = '';
+      launcher.style.opacity   = '';
+    }
+
+    launcher.addEventListener('click', () => isOpen ? closeChat() : openChat());
+    closeBtn.addEventListener('click', closeChat);
+
+    function scrollToBottom() {
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addUserMsg(text) {
+      const el = document.createElement('div');
+      el.className = 'chat-msg user';
+      el.innerHTML = `<div class="msg-avatar">👤</div><div class="msg-bubble">${text}</div>`;
+      messages.appendChild(el);
+      scrollToBottom();
+    }
+
+    function addBotMsg(html) {
+      const el = document.createElement('div');
+      el.className = 'chat-msg bot';
+      el.innerHTML = `<div class="msg-avatar">🛣️</div><div class="msg-bubble">${html}</div>`;
+      messages.appendChild(el);
+      scrollToBottom();
+    }
+
+    function showTyping() {
+      const el = document.createElement('div');
+      el.className = 'chat-msg bot'; el.id = 'typingIndicator';
+      el.innerHTML = `<div class="msg-avatar">🛣️</div><div class="msg-bubble"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+      messages.appendChild(el); scrollToBottom();
+      return el;
+    }
+
+    function sendMessage(text) {
+      const clean = text.trim();
+      if (!clean) return;
+      addUserMsg(clean);
+      chatInput.value = '';
+      const typing = showTyping();
+      setTimeout(() => {
+        typing.remove();
+        addBotMsg(matchResponse(clean));
+      }, 900 + Math.random() * 400);
+    }
+
+    sendBtn.addEventListener('click', () => sendMessage(chatInput.value));
+    chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(chatInput.value); });
+    chips.forEach(chip => chip.addEventListener('click', () => {
+      openChat();
+      setTimeout(() => sendMessage(chip.dataset.q), 200);
+    }));
+
+    // ══════════════════════════════════════════════════════════════
+    //  FEEDBACK SECTION
+    // ══════════════════════════════════════════════════════════════
+
+    const AVATARS = ['👩‍💻','👨‍🔬','🧑‍🎓','👩‍🏫','👨‍💼','🧑‍🔧','👩‍🔬','👨‍🎓','🧑‍💻','👩‍💼'];
+    const CAT_MAP = { general:'cat-general', model:'cat-model', ux:'cat-ux', feature:'cat-feature' };
+    const CAT_LABEL = { general:'General', model:'Model Accuracy', ux:'UI / UX', feature:'Feature Request' };
+
+    let feedbacks = [];
+    let selectedStars = 0;
+
+    // Seed with 3 demo entries so the feed isn't empty on first load
+    const SEED = [
+      { name:'Prof. Anand Iyer', role:'DSML Mentor, IIMSTC', stars:5, category:'model', text:'Excellent project from the IIMSTC cohort. The risk zone overlay for Bengaluru roads is both visually impressive and technically sound.', time: Date.now() - 86400000 },
+      { name:'Rajesh Kumar',     role:'Ward Engineer, BBMP', stars:5, category:'feature', text:'As a BBMP ward engineer, the severity assessment is surprisingly accurate. The cost estimation in INR is a practical touch that makes this deployment-ready.', time: Date.now() - 43200000 },
+      { name:'Sneha Patil',      role:'Data Scientist, NHAI', stars:5, category:'model', text:'The confusion matrix and analytics panel give full model transparency — something many commercial solutions lack. Great for auditing.', time: Date.now() - 3600000 },
+    ];
+    feedbacks = [...SEED];
+
+    // Star rating interaction
+    const starBtns = document.querySelectorAll('.star-btn');
+    starBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedStars = parseInt(btn.dataset.val);
+        starBtns.forEach((b, i) => b.classList.toggle('active', i < selectedStars));
+      });
+      btn.addEventListener('mouseenter', () => {
+        const v = parseInt(btn.dataset.val);
+        starBtns.forEach((b, i) => b.classList.toggle('active', i < v));
+      });
+    });
+    document.getElementById('starRow').addEventListener('mouseleave', () => {
+      starBtns.forEach((b, i) => b.classList.toggle('active', i < selectedStars));
+    });
+
+    function timeAgo(ts) {
+      const diff = Date.now() - ts;
+      if (diff < 60000)   return 'just now';
+      if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+      if (diff < 86400000)return Math.floor(diff/3600000) + 'h ago';
+      return Math.floor(diff/86400000) + 'd ago';
+    }
+
+    function renderFeed() {
+      const list = document.getElementById('feedList');
+      const empty = document.getElementById('feedEmpty');
+      const countEl = document.getElementById('feedCountText');
+      countEl.textContent = feedbacks.length + ' response' + (feedbacks.length !== 1 ? 's' : '');
+
+      // Remove all existing cards (keep the empty placeholder)
+      list.querySelectorAll('.feed-card').forEach(el => el.remove());
+
+      if (feedbacks.length === 0) {
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      // Render newest first
+      [...feedbacks].reverse().forEach(fb => {
+        const card = document.createElement('div');
+        card.className = 'feed-card';
+        const avatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+        const stars  = '⭐'.repeat(fb.stars) + '☆'.repeat(5 - fb.stars);
+        card.innerHTML =
+          '<div class="feed-card-top">' +
+            '<div class="feed-card-author">' +
+              '<div class="feed-avatar">' + avatar + '</div>' +
+              '<div>' +
+                '<div class="feed-name">' + (fb.name || 'Anonymous') + '</div>' +
+                '<div class="feed-role">' + (fb.role || 'User') + '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="feed-meta">' +
+              '<div class="feed-stars">' + stars + '</div>' +
+              '<div class="feed-time">' + timeAgo(fb.time) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<span class="feed-category ' + (CAT_MAP[fb.category] || 'cat-general') + '">' + (CAT_LABEL[fb.category] || 'General') + '</span>' +
+          '<p class="feed-text">' + fb.text + '</p>';
+        list.appendChild(card);
+      });
+    }
+
+    // Submit handler
+    document.getElementById('fbSubmit').addEventListener('click', () => {
+      const name  = document.getElementById('fbName').value.trim();
+      const role  = document.getElementById('fbRole').value.trim();
+      const cat   = document.getElementById('fbCategory').value;
+      const text  = document.getElementById('fbText').value.trim();
+
+      if (!text) {
+        document.getElementById('fbText').focus();
+        document.getElementById('fbText').style.borderColor = 'var(--accent2)';
+        setTimeout(() => document.getElementById('fbText').style.borderColor = '', 1500);
+        return;
+      }
+
+      feedbacks.push({
+        name: name || 'Anonymous',
+        role: role || 'User',
+        stars: selectedStars || 5,
+        category: cat,
+        text,
+        time: Date.now()
+      });
+
+      renderFeed();
+
+      // Reset form
+      document.getElementById('fbName').value = '';
+      document.getElementById('fbRole').value = '';
+      document.getElementById('fbText').value = '';
+      document.getElementById('fbCategory').value = 'general';
+      selectedStars = 0;
+      starBtns.forEach(b => b.classList.remove('active'));
+
+      const toast = document.getElementById('fbToast');
+      toast.style.display = 'block';
+      setTimeout(() => toast.style.display = 'none', 3500);
+    });
+
+    // Initial render
+    renderFeed();
+
+  </script>
+</body>
+</html>
