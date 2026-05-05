@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pothole Intelligence</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:opsz,wght@9..40,300;9..40,500;9..40,700&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
+  <link href="chatbot/chatbot.css" rel="stylesheet">
+
+  <style>
+    :root, [data-theme="dark"] {
+      --bg:        #080a0e;
+      --surface:   #0e1118;
+      --surface2:  #141720;
+      --surface3:  #1c2030;
+      --border:    rgba(255,255,255,0.06);
+      --border2:   rgba(255,255,255,0.10);
+      --accent:    #f5c842;
+      --accent2:   #ff5c5c;
+      --accent3:   #00e5c4;
+      --text:      #e8eaf2;
+      --muted:     #5a5f7a;
+      --muted2:    #7a7f9a;
+      --low:       #3ddc84;
+      --med:       #f5c842;
+      --high:      #ff5c5c;
+      --font-mono: 'Space Mono', monospace;
+      --font-body: 'DM Sans', sans-serif;
+      --r:         14px;
+      --grid-alpha: 0.012;
+      --topbar-bg: rgba(8,10,14,0.92);
+      --invert-map: invert(1) hue-rotate(180deg) brightness(.82) saturate(.7);
+    }
+    [data-theme="light"] {
+      --bg:        #f0f2f5;
+      --surface:   #ffffff;
+      --surface2:  #f5f6f8;
+      --surface3:  #e8eaef;
+      --border:    rgba(0,0,0,0.08);
+      --border2:   rgba(0,0,0,0.12);
+      --accent:    #d4a017;
+      --accent2:   #e04040;
+      --accent3:   #00b89c;
+      --text:      #1a1c24;
+      --muted:     #6b7082;
+      --muted2:    #4f5366;
+      --low:       #22a85a;
+      --med:       #d4a017;
+      --high:      #e04040;
+      --grid-alpha: 0.04;
+      --topbar-bg: rgba(240,242,245,0.92);
+      --invert-map: none;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    html{scroll-behavior:smooth;}
+    body{font-family:var(--font-body);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+    body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+      background-image:linear-gradient(rgba(128,128,128,var(--grid-alpha)) 1px,transparent 1px),linear-gradient(90deg,rgba(128,128,128,var(--grid-alpha)) 1px,transparent 1px);
+      background-size:40px 40px;}
+    body::after{content:'';position:fixed;top:-300px;left:50%;transform:translateX(-50%);width:900px;height:600px;
+      background:radial-gradient(ellipse,rgba(245,200,66,0.07) 0%,transparent 65%);pointer-events:none;z-index:0;}
+    *{position:relative;z-index:1;}
+
+    /* TOPBAR */
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 36px;
+      border-bottom:1px solid var(--border);background:var(--topbar-bg);
+      backdrop-filter:blur(16px);position:sticky;top:0;z-index:200;}
+    .logo{display:flex;align-items:center;gap:10px;}
+    .logo-icon{width:30px;height:30px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;}
+    .logo-text{font-family:var(--font-mono);font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--text);}
+    .logo-text span{color:var(--accent);}
+    .topbar-right{display:flex;align-items:center;gap:20px;}
+    .infer-pill-top{display:none;font-family:var(--font-mono);font-size:10px;color:var(--muted2);border:1px solid var(--border2);padding:3px 10px;border-radius:100px;}
+    .topbar-status{display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+    .status-dot{width:7px;height:7px;border-radius:50%;background:var(--low);animation:pulse-dot 2s ease-in-out infinite;}
+    @keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(61,220,132,.5);}50%{opacity:.7;box-shadow:0 0 0 5px rgba(61,220,132,0);}}
+
+    /* PAGE */
+    .page{padding:28px 36px 80px;max-width:1360px;margin:0 auto;}
+    @media(max-width:900px){.page{padding:20px 16px 80px;}.topbar{padding:14px 20px;}}
+
+    /* HERO */
+    .hero{text-align:center;padding:44px 0 36px;}
+    .hero-tag{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;color:var(--accent);text-transform:uppercase;border:1px solid rgba(245,200,66,.22);padding:5px 16px;border-radius:100px;margin-bottom:22px;}
+    .hero h1{font-size:clamp(30px,5vw,54px);font-weight:700;line-height:1.1;letter-spacing:-.02em;margin-bottom:14px;}
+    .hero h1 em{font-style:normal;color:var(--accent);}
+    .hero-sub{font-size:15px;color:var(--muted2);font-weight:300;max-width:440px;margin:0 auto;line-height:1.6;}
+
+    /* GRID */
+    .main-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px;}
+    @media(max-width:900px){.main-grid{grid-template-columns:1fr;}}
+    .col-full{grid-column:1 / -1;}
+
+    /* PANEL */
+    .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .25s;}
+    .panel:hover{border-color:rgba(255,255,255,.09);}
+    .panel-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 14px;border-bottom:1px solid var(--border);}
+    .panel-title{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px;}
+    .panel-title::before{content:'';width:3px;height:11px;background:var(--accent);border-radius:2px;}
+    .panel-body{padding:20px;}
+
+    /* UPLOAD */
+    .upload-zone{border:1.5px dashed rgba(245,200,66,.18);border-radius:10px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .22s;background:rgba(245,200,66,.02);}
+    .upload-zone:hover{border-color:rgba(245,200,66,.45);background:rgba(245,200,66,.045);}
+    .upload-zone.drag-over{border-color:var(--accent);background:rgba(245,200,66,.07);}
+    .upload-icon{width:48px;height:48px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:20px;border:1px solid var(--border);transition:transform .2s;}
+    .upload-zone:hover .upload-icon{transform:translateY(-3px);}
+    .upload-zone h3{font-size:14px;font-weight:500;margin-bottom:4px;}
+    .upload-zone p{font-size:12px;color:var(--muted);font-weight:300;}
+    #fileInput{display:none;}
+
+    #previewWrapper{display:none;margin-top:14px;position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--border);}
+    #previewImg{display:block;width:100%;}
+    #boxCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+    .video-frame-badge{position:absolute;top:8px;left:8px;background:rgba(8,10,14,.88);border:1px solid rgba(245,200,66,.3);border-radius:5px;padding:3px 9px;font-family:var(--font-mono);font-size:9px;color:var(--accent);letter-spacing:.08em;display:none;z-index:2;}
+
+    #videoScrubWrapper{display:none;margin-top:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;}
+    .scrub-label{display:flex;align-items:center;justify-content:space-between;font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-bottom:8px;}
+    #frameTimecode{color:var(--accent);}
+    #videoScrubber{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:var(--surface3);border-radius:100px;outline:none;cursor:pointer;}
+    #videoScrubber::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg);transition:transform .15s;}
+    #videoScrubber::-webkit-slider-thumb:hover{transform:scale(1.2);}
+
+    #predictBtn{display:none;width:100%;margin-top:14px;padding:13px;background:var(--accent);color:#080a0e;font-family:var(--font-mono);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:none;border-radius:8px;cursor:pointer;transition:all .2s;}
+    #predictBtn:hover{background:#ffd55e;transform:translateY(-1px);}
+    #predictBtn:active{transform:translateY(0);}
+    #predictBtn:disabled{background:var(--surface3);color:var(--muted);cursor:not-allowed;transform:none;}
+
+    #statusMsg{display:none;margin-top:12px;padding:11px 14px;border-radius:7px;font-size:12px;font-family:var(--font-mono);}
+    #statusMsg.loading{background:rgba(245,200,66,.07);color:var(--accent);border:1px solid rgba(245,200,66,.18);}
+    #statusMsg.error{background:rgba(255,92,92,.07);color:var(--high);border:1px solid rgba(255,92,92,.18);}
+    #statusMsg.success{background:rgba(61,220,132,.07);color:var(--low);border:1px solid rgba(61,220,132,.18);}
+
+    #resultsList{display:none;margin-top:14px;}
+    .det-list-title{font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+    .detection-item{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;margin-bottom:5px;font-size:12px;transition:border-color .2s;}
+    .detection-item:hover{border-color:var(--border2);}
+    .det-name{font-family:var(--font-mono);font-size:11px;color:var(--text);display:flex;align-items:center;gap:8px;}
+    .det-idx{font-size:9px;color:var(--muted);background:var(--surface3);padding:2px 6px;border-radius:4px;}
+    .det-conf{font-family:var(--font-mono);font-size:11px;padding:2px 9px;border-radius:5px;background:rgba(0,229,196,.09);color:var(--accent3);border:1px solid rgba(0,229,196,.18);}
+
+    /* ── LOCATION BADGE ── */
+    #locationBadge{display:none;margin-top:12px;padding:12px 14px;border-radius:10px;align-items:center;gap:12px;animation:fadeIn .4s ease;line-height:1.4;}
+    #locationBadge.source-exif{background:rgba(0,229,196,.07);border:1px solid rgba(0,229,196,.18);color:var(--accent3);}
+    #locationBadge.source-video{background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.18);color:var(--accent);}
+    #locationBadge.source-gps{background:rgba(61,220,132,.07);border:1px solid rgba(61,220,132,.18);color:var(--low);}
+    #locationBadge.source-default{background:rgba(255,92,92,.07);border:1px solid rgba(255,92,92,.18);color:var(--high);}
+    #locationBadge.source-manual{background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.18);color:var(--accent);}
+    .loc-icon{font-size:13px;flex-shrink:0;}
+    .loc-detail{display:flex;flex-direction:column;gap:2px;}
+    .loc-source{font-size:9px;letter-spacing:.1em;text-transform:uppercase;opacity:.7;}
+    .loc-coords{font-size:11px;letter-spacing:.04em;}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+
+    /* ── MANUAL LOCATION FORM ── */
+    #manualLocationForm{display:none;margin-top:10px;border:1.5px dashed rgba(255,92,92,.28);border-radius:10px;padding:14px;background:rgba(255,92,92,.04);animation:fadeIn .3s ease;}
+    .manual-loc-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+    .manual-loc-icon{font-size:16px;}
+    .manual-loc-title{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--high);}
+    .manual-loc-sub{font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;}
+    .manual-loc-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px;}
+    .manual-loc-grid label{display:flex;flex-direction:column;gap:5px;font-family:var(--font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+    .manual-loc-grid input{width:100%;padding:10px 11px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;transition:border-color .2s;}
+    .manual-loc-grid input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(245,200,66,.1);}
+    .manual-loc-grid input.input-error{border-color:var(--high);box-shadow:0 0 0 3px rgba(255,92,92,.1);}
+    .manual-loc-actions{display:flex;gap:8px;}
+    #manualLocConfirm{flex:1;padding:10px;background:var(--accent);color:#080a0e;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;border:none;border-radius:7px;cursor:pointer;transition:all .2s;}
+    #manualLocConfirm:hover{background:#ffd55e;transform:translateY(-1px);}
+    #manualLocUseDefault{flex:1;padding:10px;background:var(--surface2);color:var(--muted2);font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;border:1px solid var(--border2);border-radius:7px;cursor:pointer;transition:all .2s;}
+    #manualLocUseDefault:hover{border-color:var(--border2);color:var(--text);}
+    .manual-loc-hint{font-size:10px;color:var(--muted);margin-top:8px;font-family:var(--font-mono);}
+    .manual-loc-hint a{color:var(--accent);text-decoration:none;}
+    .manual-loc-hint a:hover{text-decoration:underline;}
+
+    /* KPI */
+    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+    @media(max-width:700px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+    .kpi{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px 16px;position:relative;overflow:hidden;transition:border-color .25s;}
+    .kpi:hover{border-color:var(--border2);}
+    .kpi::after{content:'';position:absolute;top:0;right:0;width:60px;height:60px;border-radius:0 12px 0 100%;background:var(--kpi-accent,rgba(245,200,66,.05));}
+    .kpi-label{font-family:var(--font-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+    .kpi-value{font-family:var(--font-mono);font-size:26px;font-weight:700;color:var(--text);line-height:1;}
+    .kpi-unit{font-size:10px;color:var(--muted);margin-top:4px;}
+
+    /* SEVERITY */
+    .sev-wrapper{padding:18px 20px 20px;}
+    .sev-header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px;}
+    .sev-title{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);}
+    .sev-num{font-family:var(--font-mono);font-size:34px;font-weight:700;line-height:1;}
+    .sev-denom{font-size:15px;color:var(--muted);font-family:var(--font-mono);}
+    .sev-track{height:7px;background:var(--surface3);border-radius:100px;overflow:hidden;margin-bottom:7px;}
+    .sev-fill{height:100%;border-radius:100px;transition:width .9s cubic-bezier(.16,1,.3,1);width:0%;}
+    .sev-ticks{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--muted);}
+    .repair-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;}
+    .repair-row:last-child{border-bottom:none;padding-bottom:0;}
+    .repair-key{font-size:11px;color:var(--muted);font-weight:300;}
+    .repair-val{font-family:var(--font-mono);font-size:12px;font-weight:700;}
+    .priority-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 14px;border-radius:100px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;}
+    .priority-pill.high{background:rgba(255,92,92,.12);color:var(--high);border:1px solid rgba(255,92,92,.22);}
+    .priority-pill.medium{background:rgba(245,200,66,.12);color:var(--med);border:1px solid rgba(245,200,66,.22);}
+    .priority-pill.low{background:rgba(61,220,132,.12);color:var(--low);border:1px solid rgba(61,220,132,.22);}
+
+    /* RICE */
+    .rice-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;}
+    .rice-item{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:13px;}
+    .rice-label{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;}
+    .rice-val{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--text);}
+    .rice-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+    .factors-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;}
+    .factor-box{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px;text-align:center;}
+    .factor-name{font-family:var(--font-mono);font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:5px;}
+    .factor-val{font-family:var(--font-mono);font-size:14px;font-weight:700;}
+
+    /* ★ ANALYTICS PANEL */
+    .analytics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;}
+    .metric-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden;}
+    .metric-card::before{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--mc-color,var(--accent));border-radius:0 0 10px 10px;}
+    .metric-card-label{font-family:var(--font-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+    .metric-card-value{font-family:var(--font-mono);font-size:30px;font-weight:700;line-height:1;color:var(--mc-color,var(--text));}
+    .metric-card-sub{font-size:10px;color:var(--muted);margin-top:5px;}
+    .metric-card-bar{margin-top:12px;height:4px;background:var(--surface3);border-radius:100px;overflow:hidden;}
+    .metric-card-bar-fill{height:100%;border-radius:100px;background:var(--mc-color,var(--accent));transition:width 1s cubic-bezier(.16,1,.3,1);}
+    .conf-matrix{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:11px;margin-top:4px;}
+    .conf-matrix th{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 8px;text-align:center;}
+    .conf-matrix td{padding:8px;text-align:center;border-radius:4px;border:1px solid var(--border);}
+    .cm-tp{background:rgba(61,220,132,.14);color:var(--low);font-weight:700;}
+    .cm-fp{background:rgba(245,200,66,.10);color:var(--med);}
+    .cm-fn{background:rgba(255,92,92,.10);color:var(--high);}
+    .cm-tn{background:rgba(0,229,196,.08);color:var(--accent3);}
+    .analytics-note{font-size:11px;color:var(--muted);font-family:var(--font-mono);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px 14px;margin-top:14px;display:flex;align-items:center;gap:8px;}
+
+    /* MAP */
+    #map{height:400px;}
+    .leaflet-container{background:var(--surface2);}
+    .leaflet-tile-pane{filter:var(--invert-map);}
+    .leaflet-popup-content-wrapper{background:var(--surface) !important;border:1px solid var(--border2) !important;border-radius:10px !important;box-shadow:0 8px 32px rgba(0,0,0,.6) !important;color:var(--text) !important;}
+    .leaflet-popup-tip{background:var(--surface) !important;}
+    .map-legend{padding:10px 20px 14px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;border-top:1px solid var(--border);}
+    .map-legend-title{font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+    .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted2);}
+    .legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+    .zone-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted2);}
+    .zone-dot{width:14px;height:8px;border-radius:2px;border:1.5px dashed;flex-shrink:0;}
+
+    /* CHART */
+    .chart-body{padding:20px;height:280px;position:relative;}
+    .chart-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:12px;}
+    .chart-placeholder-icon{font-size:28px;opacity:.35;}
+
+    /* SCAN LOG */
+    .scan-log{max-height:190px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--surface3) transparent;}
+    .log-entry{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px;animation:slideIn .3s ease;}
+    .condition-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+    .condition-grid label{display:flex;flex-direction:column;gap:5px;font-family:var(--font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+    .condition-grid input,.condition-grid select{width:100%;padding:10px 11px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;}
+    .model-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+    .model-metric{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;}
+    .model-metric-label{font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+    .model-metric-value{font-size:24px;font-weight:700;color:var(--text);}
+    .risk-track{height:10px;border-radius:999px;background:var(--surface3);overflow:hidden;margin-top:10px;}
+    .risk-fill{height:100%;width:0%;border-radius:999px;background:var(--low);transition:width .25s ease,background .25s ease;}
+    .model-badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 10px;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.04em;}
+    .model-badge.low{background:rgba(61,220,132,.14);color:var(--low);}
+    .model-badge.medium{background:rgba(245,200,66,.14);color:var(--med);}
+    .model-badge.high{background:rgba(255,149,74,.14);color:#ff954a;}
+    .model-badge.critical{background:rgba(255,92,92,.14);color:var(--high);}
+    .dominant-factor{padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);font-weight:700;color:var(--accent);}
+    .raw-details{margin-top:14px;border-top:1px solid var(--border);padding-top:12px;}
+    .raw-details summary{cursor:pointer;font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+    .raw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px;}
+    .raw-grid pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--muted);}
+    .model-chart-body{height:260px;padding:16px;position:relative;}
+    @media(max-width:780px){.condition-grid,.model-grid,.raw-grid{grid-template-columns:1fr;}}
+    @keyframes slideIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+    .log-time{font-family:var(--font-mono);font-size:9px;color:var(--muted);flex-shrink:0;}
+    .log-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+    .log-text{color:var(--text);flex:1;}
+    .log-score{font-family:var(--font-mono);font-size:9px;color:var(--muted);}
+    .log-empty{text-align:center;color:var(--muted);font-size:11px;padding:22px;font-style:italic;}
+    .infer-pill{display:none;font-family:var(--font-mono);font-size:10px;color:var(--muted);border:1px solid var(--border);padding:3px 10px;border-radius:100px;}
+    .no-data{padding:36px 20px;text-align:center;color:var(--muted);font-size:12px;}
+    .no-data-icon{font-size:26px;margin-bottom:7px;opacity:.4;}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spinner{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;margin-right:5px;vertical-align:middle;}
+
+    /* THEME & LANGUAGE CONTROLS */
+    .controls-bar{display:flex;align-items:center;gap:12px;}
+    .theme-toggle{width:40px;height:40px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:all .25s;}
+    .theme-toggle:hover{border-color:var(--border2);transform:translateY(-2px);background:var(--surface3);}
+    .lang-select{font-family:var(--font-mono);font-size:11px;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;letter-spacing:.04em;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a7f9a' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px;transition:all .25s;}
+    .lang-select:hover{border-color:var(--border2);}
+    .lang-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(245,200,66,.15);}
+    .lang-select option{background:var(--surface);color:var(--text);}
+  </style>
+    <link href="/chatbot/chatbot.css" rel="stylesheet">
+</head>
+<body>
+
+  <nav class="topbar">
+    <div class="logo">
+      <div class="logo-icon">🛣️</div>
+      <span class="logo-text">POTHOLE<span>INTEL</span></span>
+    </div>
+    <div class="topbar-right">
+      <span class="infer-pill-top" id="inferTime"></span>
+      <div class="topbar-status">
+        <div class="status-dot"></div>
+        <span id="sysStatus" data-i18n="systemReady">SYSTEM READY</span>
+      </div>
+      <div class="controls-bar">
+        <select class="lang-select" id="langSelect" aria-label="Language">
+          <option value="en">🇬🇧 EN</option>
+          <option value="kn">🇮🇳 ಕನ್ನಡ</option>
+        </select>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+      </div>
+    </div>
+  </nav>
+
+  <video id="hiddenVideo" style="display:none;" crossorigin="anonymous" preload="metadata"></video>
+
+  <div class="page">
+    <div class="hero">
+      <div class="hero-tag"><span>●</span> YOLOv11 · <span data-i18n="heroTag">Road Intelligence System</span></div>
+      <h1 data-i18n="heroTitle">Detect. Assess.<br/><em>Prioritise.</em></h1>
+      <p class="hero-sub" data-i18n="heroSub">Upload road imagery for AI-powered pothole detection and repair prioritisation.</p>
+    </div>
+
+    <div class="main-grid">
+
+      <!-- LEFT: Upload -->
+      <div>
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title" data-i18n="panelInput">Input</div>
+            <span class="infer-pill" id="inferTimeSide"></span>
+          </div>
+          <div class="panel-body">
+            <label class="upload-zone" id="uploadArea" for="fileInput">
+              <div class="upload-icon">📷</div>
+              <h3 data-i18n="uploadTitle">Drop road image here</h3>
+              <p data-i18n="uploadSub">or click to browse · JPG, PNG, WEBP, MP4, MOV · max 64 MB</p>
+            </label>
+            <input type="file" id="fileInput" accept="image/*,video/*" />
+            <div id="previewWrapper">
+              <img id="previewImg" alt="Road preview" />
+              <canvas id="boxCanvas"></canvas>
+              <div class="video-frame-badge" id="videoFrameBadge">🎬 VIDEO FRAME</div>
+            </div>
+            <div id="videoScrubWrapper">
+              <div class="scrub-label"><span>SCRUB TO SELECT FRAME</span><span id="frameTimecode">0:00.000</span></div>
+              <input type="range" id="videoScrubber" min="0" max="100" step="0.01" value="10" />
+            </div>
+
+            <!-- ── LOCATION SOURCE BADGE (shown after file load) ── -->
+            <div id="locationBadge">
+              <span class="loc-icon" id="locIcon">📍</span>
+              <div class="loc-detail">
+                <span class="loc-source" id="locSource">SOURCE</span>
+                <span class="loc-coords" id="locCoords">—</span>
+              </div>
+            </div>
+
+            <!-- ── MANUAL LOCATION FORM (shown when all extraction fails) ── -->
+            <div id="manualLocationForm">
+              <div class="manual-loc-header">
+                <span class="manual-loc-icon">📍</span>
+                <span class="manual-loc-title" data-i18n="manualLocTitle">Location Not Found</span>
+              </div>
+              <p class="manual-loc-sub" data-i18n="manualLocSub">No GPS data found in this file. Enter coordinates manually or use the Bengaluru default.</p>
+              <div class="manual-loc-grid">
+                <label>
+                  <span data-i18n="latLabel">Latitude</span>
+                  <input id="manualLat" type="number" step="0.000001" placeholder="e.g. 12.9716" min="-90" max="90">
+                </label>
+                <label>
+                  <span data-i18n="lngLabel">Longitude</span>
+                  <input id="manualLng" type="number" step="0.000001" placeholder="e.g. 77.5946" min="-180" max="180">
+                </label>
+              </div>
+              <div class="manual-loc-actions">
+                <button id="manualLocConfirm" data-i18n="manualLocConfirm">✓ Use These Coords</button>
+                <button id="manualLocUseDefault" data-i18n="manualLocDefault">🗺️ Bengaluru Default</button>
+              </div>
+              <p class="manual-loc-hint" data-i18n="manualLocHint">Find coordinates at <a href="https://maps.google.com" target="_blank" rel="noopener">maps.google.com</a> — right-click any spot.</p>
+            </div>
+            <button id="predictBtn"><span id="btnIcon">⚡</span><span id="btnLabel" data-i18n="analyseBtn"> Analyse Image</span></button>
+            <div id="statusMsg"></div><div id="bootStatus" style="font-family:var(--font-mono);font-size:9px;color:var(--low);margin-top:8px;">UI booting...</div>
+            <div id="resultsList">
+              <div class="det-list-title" data-i18n="detections">Detections</div>
+              <div id="detectionsContainer"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title" data-i18n="roadConditions">Road Conditions</div>
+            <span style="font-family:var(--font-mono);font-size:9px;color:var(--muted);" data-i18n="usedByDet">USED BY DETERIORATION</span>
+          </div>
+          <div class="panel-body">
+            <div class="condition-grid">
+              <label><span data-i18n="monthlyRainfall">Monthly rainfall (mm)</span><input id="monthlyRainfall" type="number" min="0" value="120"></label>
+              <label><span data-i18n="vehiclesPerHour">Vehicles / hour</span><input id="vehiclesPerHour" type="number" min="0" value="500"></label>
+              <label><span data-i18n="roadAge">Road age (years)</span><input id="roadAgeYears" type="number" min="0" value="7"></label>
+              <label><span data-i18n="crackIntensity">Crack intensity</span><input id="crackIntensity" type="number" min="0" max="15" step="0.1" value="2"></label>
+              <label><span data-i18n="drainage">Drainage</span><select id="drainageCondition"><option value="2" data-i18n="drainGood">Good</option><option value="1" selected data-i18n="drainAvg">Average</option><option value="0" data-i18n="drainPoor">Poor</option></select></label>
+              <label><span data-i18n="construction">Construction</span><select id="constructionQuality"><option value="2" data-i18n="drainGood">Good</option><option value="1" selected data-i18n="drainAvg">Average</option><option value="0" data-i18n="drainPoor">Poor</option></select></label>
+              <label><span data-i18n="tempRange">Temp. range</span><input id="temperatureRange" type="number" min="0" step="0.1" value="12"></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Severity + RICE + Log -->
+      <div style="display:flex;flex-direction:column;gap:14px;">
+
+        <div class="panel" id="repairCard" style="display:none;">
+          <div class="panel-header">
+            <div class="panel-title" data-i18n="severityAssessment">Severity Assessment</div>
+            <div id="priorityBadgeWrapper"></div>
+          </div>
+          <div class="sev-wrapper">
+            <div class="sev-header">
+              <div><div class="sev-title" data-i18n="damageLevel">Damage Level</div><div style="margin-top:5px;"><span class="sev-num" id="sevNum">0</span><span class="sev-denom"> / 5</span></div></div>
+              <div style="text-align:right;"><div class="sev-title" data-i18n="severityScore">Severity Score (0–10)</div><div style="margin-top:5px;"><span class="sev-num" id="sevScore10" style="font-size:22px;">—</span></div></div>
+            </div>
+            <div class="sev-track"><div class="sev-fill" id="sevFill"></div></div>
+            <div class="sev-ticks"><span data-i18n="minimal">Minimal</span><span data-i18n="moderate">Moderate</span><span data-i18n="critical">Critical</span></div>
+          </div>
+          <div style="padding:0 20px 20px;">
+            <div class="repair-row"><span class="repair-key" data-i18n="repairType">Repair Type</span><span class="repair-val" id="repairType">—</span></div>
+            <div class="repair-row"><span class="repair-key" data-i18n="estimatedCost">Estimated Cost</span><span class="repair-val" id="repairCost" style="color:var(--accent);">—</span></div>
+            <div class="repair-row"><span class="repair-key" data-i18n="inferenceTime">Inference Time</span><span class="repair-val" id="repairInfer" style="color:var(--accent3);">—</span></div>
+          </div>
+        </div>
+
+        <div class="panel" id="riceCard" style="display:none;">
+          <div class="panel-header">
+            <div class="panel-title" data-i18n="riceModel">RICE Model</div>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">Score: <span id="riceScoreTop" style="color:var(--accent3);font-weight:700;">—</span></span>
+          </div>
+          <div class="panel-body">
+            <div class="rice-grid" id="riceGrid"></div>
+            <div class="factors-grid" id="factorsGrid"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title" data-i18n="scanLog">Scan Log</div>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);" id="logCount">0 scans</span>
+          </div>
+          <div class="panel-body" style="padding:8px 20px 14px;">
+            <div class="scan-log" id="scanLog"><div class="log-empty" data-i18n="noScans">No scans yet. Upload an image to begin.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI Row -->
+      <div class="col-full" id="kpiRow" style="display:none;">
+        <div class="kpi-grid">
+          <div class="kpi" style="--kpi-accent:rgba(245,200,66,.07);"><div class="kpi-label" data-i18n="potholesDetected">Potholes Detected</div><div class="kpi-value" id="kpiCount">0</div><div class="kpi-unit" data-i18n="inThisFrame">in this frame</div></div>
+          <div class="kpi" style="--kpi-accent:rgba(0,229,196,.07);"><div class="kpi-label" data-i18n="priorityScore">Priority Score</div><div class="kpi-value" id="kpiPriority">—</div><div class="kpi-unit" data-i18n="outOf100">out of 100</div></div>
+          <div class="kpi" style="--kpi-accent:rgba(255,92,92,.07);"><div class="kpi-label" data-i18n="estimatedReach">Estimated Reach</div><div class="kpi-value" id="kpiReach">—</div><div class="kpi-unit" data-i18n="dailyRoadUsers">daily road users</div></div>
+          <div class="kpi" style="--kpi-accent:rgba(245,200,66,.07);"><div class="kpi-label" data-i18n="estRepairCost">Est. Repair Cost</div><div class="kpi-value" id="kpiCost" style="font-size:19px;">—</div><div class="kpi-unit" data-i18n="indianRupees">Indian Rupees</div></div>
+        </div>
+      </div>
+      <!-- Formation Analysis -->
+      <div class="col-full panel" id="formationCard" style="display:none;">
+        <div class="panel-header">
+          <div class="panel-title" data-i18n="formationAnalysis">Formation Analysis</div>
+          <span class="model-badge" id="formationRiskBadge">WAITING</span>
+        </div>
+        <div class="panel-body">
+          <div class="model-grid">
+            <div class="model-metric">
+              <div class="model-metric-label" data-i18n="riskScore">Risk Score</div>
+              <div class="model-metric-value"><span id="formationRiskScore">--</span><span style="font-size:13px;color:var(--muted);"> / 10</span></div>
+              <div class="risk-track"><div class="risk-fill" id="formationRiskFill"></div></div>
+            </div>
+            <div class="model-metric">
+              <div class="model-metric-label" data-i18n="dominantFactorLabel">Dominant Factor</div>
+              <div class="dominant-factor" id="dominantFactor">--</div>
+            </div>
+          </div>
+          <div class="model-chart-body"><canvas id="formationShapChart"></canvas></div>
+          <details class="raw-details">
+            <summary data-i18n="weatherAndRoad">Weather snapshot and road data</summary>
+            <div class="raw-grid">
+              <div><div class="model-metric-label" data-i18n="weatherSnapshot">Weather</div><pre id="weatherSnapshot">{}</pre></div>
+              <div><div class="model-metric-label" data-i18n="roadDataLabel">Road</div><pre id="roadData">{}</pre></div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- Deterioration Prediction -->
+      <div class="col-full panel" id="deteriorationCard" style="display:none;">
+        <div class="panel-header">
+          <div class="panel-title" data-i18n="deteriorationPred">Deterioration Prediction</div>
+          <span class="model-badge" id="urgencyBadge">WAITING</span>
+        </div>
+        <div class="panel-body">
+          <div class="model-chart-body"><canvas id="deteriorationChart"></canvas></div>
+          <div class="model-grid">
+            <div class="model-metric"><div class="model-metric-label" data-i18n="daysToCriticalLabel">Days to Critical</div><div class="model-metric-value" id="daysToCritical">--</div></div>
+            <div class="model-metric"><div class="model-metric-label" data-i18n="trajectoryLabel">Trajectory</div><div class="model-metric-value" id="trajectoryLabel">--</div></div>
+            <div class="model-metric"><div class="model-metric-label" data-i18n="worsenProbLabel">Worsen Probability</div><div class="model-metric-value" id="worsenProbability">--</div></div>
+            <div class="model-metric"><div class="model-metric-label" data-i18n="willWorsenLabel">Will Worsen</div><div class="model-metric-value" id="willWorsen">--</div></div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ★ ANALYTICS PANEL (new) -->
+      <div class="col-full panel">
+        <div class="panel-header">
+          <div class="panel-title" data-i18n="modelAnalytics">Model Analytics · YOLOv11</div>
+          <span style="font-family:var(--font-mono);font-size:9px;color:var(--muted);" data-i18n="trainingMetrics">TRAINING-TIME METRICS · best.pt</span>
+        </div>
+        <div class="panel-body">
+          <div class="analytics-grid">
+            <div class="metric-card" style="--mc-color:#f5c842;">
+              <div class="metric-card-label">mAP@0.5</div>
+              <div class="metric-card-value" id="mapVal">—</div>
+              <div class="metric-card-sub">Mean Average Precision</div>
+              <div class="metric-card-bar"><div class="metric-card-bar-fill" id="mapBar" style="width:0%;"></div></div>
+            </div>
+            <div class="metric-card" style="--mc-color:#00e5c4;">
+              <div class="metric-card-label">Precision</div>
+              <div class="metric-card-value" id="precisionVal">—</div>
+              <div class="metric-card-sub">TP / (TP + FP)</div>
+              <div class="metric-card-bar"><div class="metric-card-bar-fill" id="precisionBar" style="width:0%;"></div></div>
+            </div>
+            <div class="metric-card" style="--mc-color:#3ddc84;">
+              <div class="metric-card-label">Recall</div>
+              <div class="metric-card-value" id="recallVal">—</div>
+              <div class="metric-card-sub">TP / (TP + FN)</div>
+              <div class="metric-card-bar"><div class="metric-card-bar-fill" id="recallBar" style="width:0%;"></div></div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div>
+              <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Confusion Matrix · Validation Set</div>
+              <table class="conf-matrix">
+                <thead><tr><th></th><th>Pred: Pothole</th><th>Pred: BG</th></tr></thead>
+                <tbody>
+                  <tr><th style="text-align:left;padding-left:4px;font-weight:400;color:var(--muted);">Act: Pothole</th><td class="cm-tp" id="cmTP">—</td><td class="cm-fn" id="cmFN">—</td></tr>
+                  <tr><th style="text-align:left;padding-left:4px;font-weight:400;color:var(--muted);">Act: BG</th><td class="cm-fp" id="cmFP">—</td><td class="cm-tn" id="cmTN">—</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Model Info</div>
+              <div class="repair-row" style="padding:8px 0;"><span class="repair-key">Architecture</span><span class="repair-val" style="color:var(--accent);">YOLOv11-n</span></div>
+              <div class="repair-row" style="padding:8px 0;"><span class="repair-key">Dataset</span><span class="repair-val">Custom Road Dataset</span></div>
+              <div class="repair-row" style="padding:8px 0;"><span class="repair-key">Epochs Trained</span><span class="repair-val" id="epochsVal">—</span></div>
+              <div class="repair-row" style="padding:8px 0;border-bottom:none;"><span class="repair-key">F1 Score</span><span class="repair-val" id="f1Val" style="color:var(--accent3);">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ★ MAP with Bengaluru zone heatmap -->
+      <div class="col-full panel" id="mapCard">
+        <div class="panel-header">
+          <div class="panel-title" data-i18n="detectionMap">Detection Map · Bengaluru</div>
+          <span style="font-family:var(--font-mono);font-size:9px;color:var(--muted);" data-i18n="liveMarkers">LIVE MARKERS + RISK ZONE OVERLAY</span>
+        </div>
+        <div id="map"></div>
+        <div class="map-legend">
+          <span class="map-legend-title">Markers</span>
+          <div class="legend-item"><div class="legend-dot" style="background:#ff5c5c;"></div>High</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f5c842;"></div>Medium</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#3ddc84;"></div>Low</div>
+          <span style="margin:0 6px;color:var(--surface3);">|</span>
+          <span class="map-legend-title">Zones</span>
+          <div class="zone-legend-item"><div class="zone-dot" style="background:rgba(255,92,92,.2);border-color:#ff5c5c;"></div>High Risk</div>
+          <div class="zone-legend-item"><div class="zone-dot" style="background:rgba(245,200,66,.2);border-color:#f5c842;"></div>Medium Risk</div>
+          <div class="zone-legend-item"><div class="zone-dot" style="background:rgba(61,220,132,.2);border-color:#3ddc84;"></div>Low Risk</div>
+          <span style="margin-left:auto;font-family:var(--font-mono);font-size:9px;color:var(--muted);">Hover zone polygon for name</span>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title" data-i18n="priorityDist">Priority Distribution</div></div>
+        <div class="chart-body">
+          <div class="chart-placeholder" id="chartPlaceholder"><div class="chart-placeholder-icon">📊</div><span>Run analyses to build the chart</span></div>
+          <canvas id="priorityChart" style="display:none;"></canvas>
+        </div>
+      </div>
+
+      <!-- Analysis Detail -->
+      <div class="panel" id="analysisPanel">
+        <div class="panel-header"><div class="panel-title" data-i18n="analysisDetails">Analysis Details</div></div>
+        <div id="analysisBody"><div class="no-data"><div class="no-data-icon">🔬</div><div>Run a scan to see analysis details</div></div></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const uploadArea=document.getElementById('uploadArea'),fileInput=document.getElementById('fileInput'),previewWrapper=document.getElementById('previewWrapper'),previewImg=document.getElementById('previewImg'),boxCanvas=document.getElementById('boxCanvas'),predictBtn=document.getElementById('predictBtn'),statusMsg=document.getElementById('statusMsg'),resultsList=document.getElementById('resultsList'),detectionsContainer=document.getElementById('detectionsContainer'),btnIcon=document.getElementById('btnIcon'),btnLabel=document.getElementById('btnLabel'),hiddenVideo=document.getElementById('hiddenVideo'),videoScrubWrapper=document.getElementById('videoScrubWrapper'),videoScrubber=document.getElementById('videoScrubber'),frameTimecode=document.getElementById('frameTimecode'),videoFrameBadge=document.getElementById('videoFrameBadge');
+    
+    // Manual Location Form elements
+    const manualForm = document.getElementById('manualLocationForm'),
+          manualLatInput = document.getElementById('manualLat'),
+          manualLngInput = document.getElementById('manualLng'),
+          manualConfirmBtn = document.getElementById('manualLocConfirm'),
+          manualDefaultBtn = document.getElementById('manualLocUseDefault');
+
+    let selectedFile=null,isVideoFile=false,scanCount=0,resolvedLocation=null;
+    const chartCounts={High:0,Medium:0,Low:0};let chartInstance=null,formationChart=null,deteriorationChart=null;
+    const API_BASE='http://localhost:5000';
+    const DEFAULT_LOCATION = { lat: 12.9716, lng: 77.5946, source: 'default' };
+
+    function resizeCanvas() {
+      if (!previewImg || !boxCanvas) return;
+      boxCanvas.width = previewImg.offsetWidth;
+      boxCanvas.height = previewImg.offsetHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function dmsToDecimal(dms, ref) {
+      if (!dms || dms.length < 3) return null;
+      const deg = dms[0].numerator / dms[0].denominator;
+      const min = dms[1].numerator / dms[1].denominator;
+      const sec = dms[2].numerator / dms[2].denominator;
+      let dd = deg + min / 60 + sec / 3600;
+      if (ref === 'S' || ref === 'W') dd = -dd;
+      return dd;
+    }
+
+    function extractExifGPS(file) {
+      return new Promise(resolve => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          if (typeof EXIF === 'undefined') { URL.revokeObjectURL(url); resolve(null); return; }
+          EXIF.getData(img, function() {
+            try {
+              const lat = EXIF.getTag(this, 'GPSLatitude'), latRef = EXIF.getTag(this, 'GPSLatitudeRef'),
+                    lng = EXIF.getTag(this, 'GPSLongitude'), lngRef = EXIF.getTag(this, 'GPSLongitudeRef'),
+                    altTag = EXIF.getTag(this, 'GPSAltitude'), altRef = EXIF.getTag(this, 'GPSAltitudeRef');
+              if (!lat || !lng) { URL.revokeObjectURL(url); resolve(null); return; }
+              const decLat = dmsToDecimal(lat, latRef), decLng = dmsToDecimal(lng, lngRef);
+              if (decLat == null || decLng == null) { URL.revokeObjectURL(url); resolve(null); return; }
+              let alt = null; if (altTag) { alt = altTag.numerator / altTag.denominator; if (altRef === 1) alt = -alt; }
+              URL.revokeObjectURL(url); resolve({ lat: decLat, lng: decLng, alt });
+            } catch (e) { URL.revokeObjectURL(url); resolve(null); }
+          });
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+        img.src = url;
+      });
+    }
+
+    function extractVideoGPS(file) {
+      return new Promise(resolve => {
+        const SCAN_BYTES = 131072;
+        const blob = file.slice(0, SCAN_BYTES);
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const buf = e.target.result;
+            const text = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(buf));
+            const iso6709 = text.match(/([+-]\d{1,3}\.\d{2,8})([+-]\d{1,4}\.\d{2,8})/);
+            if (iso6709) {
+              const lat = parseFloat(iso6709[1]), lng = parseFloat(iso6709[2]);
+              if (isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) { resolve({ lat, lng }); return; }
+            }
+            resolve(null);
+          } catch (_) { resolve(null); }
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsArrayBuffer(blob);
+      });
+    }
+
+    async function resolveLocation(file, isVideo) {
+      if (!isVideo) {
+        const exif = await extractExifGPS(file);
+        if (exif) return { ...exif, source: 'exif' };
+      } else {
+        const vid = await extractVideoGPS(file);
+        if (vid) return { ...vid, source: 'video' };
+      }
+      return null;
+    }
+
+    const LOCATION_SOURCE_CONFIG = {
+      exif:    { icon: '📷', label: 'EXIF GPS · from photo metadata',    cls: 'source-exif'    },
+      video:   { icon: '🎬', label: 'VIDEO GPS · from media metadata',   cls: 'source-video'   },
+      gps:     { icon: '📡', label: 'DEVICE GPS · browser geolocation',  cls: 'source-gps'     },
+      default: { icon: '🗺️', label: 'DEFAULT · Bengaluru city centre',   cls: 'source-default' },
+      manual:  { icon: '✏️', label: 'MANUAL ENTRY · user-supplied',       cls: 'source-manual'  },
+    };
+
+    function showLocationBadge(locResult) {
+      const badge = document.getElementById('locationBadge'), icon = document.getElementById('locIcon'),
+            source = document.getElementById('locSource'), coords = document.getElementById('locCoords'),
+            cfg = LOCATION_SOURCE_CONFIG[locResult.source] || LOCATION_SOURCE_CONFIG.default;
+      badge.className = cfg.cls; icon.textContent = cfg.icon; source.textContent = cfg.label;
+      coords.textContent = `${locResult.lat.toFixed(5)}, ${locResult.lng.toFixed(5)}`;
+      badge.style.display = 'flex';
+    }
+
+    let _manualResolve = null;
+    function showManualForm() {
+      return new Promise(resolve => {
+        _manualResolve = resolve; manualLatInput.value = ''; manualLngInput.value = '';
+        manualLatInput.classList.remove('input-error'); manualLngInput.classList.remove('input-error');
+        document.getElementById('locationBadge').style.display = 'none';
+        manualForm.style.display = 'block'; manualLatInput.focus();
+      });
+    }
+    function hideManualForm() { manualForm.style.display = 'none'; }
+
+    manualConfirmBtn.addEventListener('click', () => {
+      const lat = parseFloat(manualLatInput.value), lng = parseFloat(manualLngInput.value);
+      let ok = true;
+      if (!isFinite(lat) || lat < -90 || lat > 90) { manualLatInput.classList.add('input-error'); ok = false; }
+      if (!isFinite(lng) || lng < -180 || lng > 180) { manualLngInput.classList.add('input-error'); ok = false; }
+      if (!ok) return;
+      const result = { lat, lng, source: 'manual' }; hideManualForm(); showLocationBadge(result);
+      if (_manualResolve) { _manualResolve(result); _manualResolve = null; }
+    });
+    manualDefaultBtn.addEventListener('click', () => {
+      hideManualForm(); showLocationBadge(DEFAULT_LOCATION);
+      if (_manualResolve) { _manualResolve(DEFAULT_LOCATION); _manualResolve = null; }
+    });
+    [manualLatInput, manualLngInput].forEach(inp => {
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') manualConfirmBtn.click(); });
+    });
+
+    uploadArea.addEventListener('dragover',e=>{e.preventDefault();uploadArea.classList.add('drag-over');});
+    uploadArea.addEventListener('dragleave',()=>uploadArea.classList.remove('drag-over'));
+    uploadArea.addEventListener('drop',e=>{e.preventDefault();uploadArea.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)handleFile(f);});
+    // Native label-for behavior opens the file picker; no JS click needed.
+    fileInput.addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0]);});
+
+    function formatTimecode(s){const m=Math.floor(s/60),sc=Math.floor(s%60),ms=Math.round((s%1)*1000);return`${m}:${String(sc).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;}
+    function captureVideoFrame(){const c=document.createElement('canvas');c.width=hiddenVideo.videoWidth||1280;c.height=hiddenVideo.videoHeight||720;c.getContext('2d').drawImage(hiddenVideo,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.92);}
+    function seekAndCapture(r){return new Promise(res=>{hiddenVideo.currentTime=r*hiddenVideo.duration;hiddenVideo.onseeked=()=>res(captureVideoFrame());});}
+
+    async function handleFile(file){
+      selectedFile=file;isVideoFile=file.type.startsWith('video/');
+      resolvedLocation = null; hideManualForm(); document.getElementById('locationBadge').style.display='none';
+      if(isVideoFile){
+        hiddenVideo.src=URL.createObjectURL(file);
+        hiddenVideo.onloadedmetadata=async()=>{videoScrubber.value=10;const d=await seekAndCapture(.10);previewImg.src=d;previewImg.onload=()=>{resizeCanvas();clearResultsUI();uploadArea.style.display='none';previewWrapper.style.display='block';videoScrubWrapper.style.display='block';videoFrameBadge.style.display='flex';predictBtn.style.display='block';frameTimecode.textContent=formatTimecode(hiddenVideo.currentTime);};};
+      }else{
+        videoScrubWrapper.style.display=videoFrameBadge.style.display='none';
+        const r=new FileReader();r.onload=e=>{previewImg.src=e.target.result;previewImg.onload=()=>{resizeCanvas();clearResultsUI();uploadArea.style.display='none';previewWrapper.style.display=predictBtn.style.display='block';};};r.readAsDataURL(file);
+      }
+      
+      // Auto-extract location
+      const badge = document.getElementById('locationBadge');
+      badge.className = 'source-default'; document.getElementById('locIcon').textContent = '⏳';
+      document.getElementById('locSource').textContent = 'EXTRACTING LOCATION…';
+      document.getElementById('locCoords').textContent = 'reading media metadata';
+      badge.style.display = 'flex';
+
+      const loc = await resolveLocation(file, isVideoFile);
+      if (loc) { resolvedLocation = loc; showLocationBadge(loc); }
+      else { badge.style.display = 'none'; resolvedLocation = await showManualForm(); }
+    }
+    async function runPredict(file,position){
+      const fd=new FormData();fd.append('image',file);fd.append('lat',position.lat);fd.append('lng',position.lng);
+      if(isVideoFile&&hiddenVideo.duration)fd.append('frame_number',Math.round(hiddenVideo.currentTime*30));
+      const res=await fetch(`${API_BASE}/predict`,{method:'POST',body:fd});
+      if(!res.ok)throw new Error(`Prediction failed with HTTP ${res.status}`);
+      const data=await res.json();if(!data.success)throw new Error(data.error||'Prediction failed.');
+      return data;
+    }
+
+    async function runFormation(file,position){
+      const fd=new FormData();fd.append('lat',position.lat);fd.append('lng',position.lng);fd.append('image',file);
+      const res=await fetch(`${API_BASE}/formation`,{method:'POST',body:fd});
+      if(!res.ok)throw new Error(`Formation failed with HTTP ${res.status}`);
+      const data=await res.json();if(!data.success)throw new Error(data.error||'Formation analysis failed.');
+      return data;
+    }
+
+    async function runDeterioration(severity,formationData){
+      const weather=formationData?.weather_snapshot||{};
+      const road=formationData?.road_data||{};
+      const monthly_rainfall=weather.monthly_rainfall_mm;
+      const road_age=road.road_age_years;
+      const temp_range=weather.diurnal_range_degC;
+      const road_type=road.road_type;
+      const riskScore=formationData?.risk_score||0;
+      
+      const payload={
+        current_severity: severity,
+        monthly_rainfall_mm: monthly_rainfall,
+        vehicles_per_hour: Number(document.getElementById('vehiclesPerHour').value || 500),
+        road_age_years: road_age,
+        temperature_range: temp_range,
+        road_type: road_type,
+        drainage_condition: Number(document.getElementById('drainageCondition').value || 1)
+      };
+      const res=await fetch(`${API_BASE}/deterioration`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      if(!res.ok)throw new Error(`Deterioration failed with HTTP ${res.status}`);
+      const data=await res.json();if(!data.success)throw new Error(data.error||'Deterioration prediction failed.');
+      return data;
+    }
+
+    predictBtn.addEventListener('click',async()=>{
+      if(!selectedFile)return;
+      if(manualForm.style.display!=='none'){ manualLatInput.focus(); return; }
+
+      predictBtn.disabled=true;btnIcon.innerHTML='<span class="spinner"></span>';btnLabel.textContent=' Analysing...';
+      document.getElementById('sysStatus').textContent='GETTING GPS';
+      showStatus('loading','<span class="spinner"></span> Verifying location...');clearResultsUI();
+      try{
+        let f=selectedFile;
+        if(isVideoFile&&hiddenVideo.readyState>=2){const c=document.createElement('canvas');c.width=hiddenVideo.videoWidth||1280;c.height=hiddenVideo.videoHeight||720;c.getContext('2d').drawImage(hiddenVideo,0,0,c.width,c.height);f=await new Promise(r=>c.toBlob(b=>r(new File([b],'frame.jpg',{type:'image/jpeg'})),'image/jpeg',.92));}
+        
+        if(!resolvedLocation) resolvedLocation = await showManualForm();
+        const position = resolvedLocation;
+
+        document.getElementById('sysStatus').textContent='INFERENCE RUNNING';
+        showStatus('loading','<span class="spinner"></span> Running YOLOv11 inference...');
+        const data=await runPredict(f,position);
+        const preds=data.predictions||[],boxes=preds.map(p=>[p.bbox.x1,p.bbox.y1,p.bbox.x2,p.bbox.y2]),labels=preds.map(p=>p.label),scores=preds.map(p=>p.confidence),count=boxes.length,ms=data.inference_time_ms;
+        if(count===0)showStatus('success','OK  No potholes detected.');
+        else{showStatus('success',`OK  ${count} pothole${count>1?'s':''} detected - ${ms} ms`);drawBoxes(boxes,labels,scores);showDetectionList(labels,scores);}
+        const ip=document.getElementById('inferTime'),ip2=document.getElementById('inferTimeSide');
+        ip.textContent=ip2.textContent=`${ms} ms`;ip.style.display=ip2.style.display='inline-block';
+
+        document.getElementById('sysStatus').textContent='FORMATION MODEL';
+        showStatus('loading','<span class="spinner"></span> Running formation analysis...');
+        const formationData=await runFormation(f,position);
+        updateFormationPanel(formationData);
+
+        document.getElementById('sysStatus').textContent='DETERIORATION MODEL';
+        showStatus('loading','<span class="spinner"></span> Predicting 30/60/90 day deterioration...');
+        const deteriorationData=await runDeterioration(data.severity,formationData);
+        updateDeteriorationPanel(data.severity,deteriorationData);
+
+        const final_priority = Math.min(
+          (data.rice_score || 0) +
+          (formationData.risk_score || 0) * 1.5 +
+          (deteriorationData.priority_bonus || 0),
+          100
+        );
+        data.priority_score = Math.round(final_priority);
+
+        updateKPI(data,count);updateRepairPanel(data);updateRicePanel(data);updateAnalysisPanel(data);updateChart(data);addMapMarker(data);addLogEntry(data,count);
+
+        showStatus('success','OK  Multi-model pipeline complete.');
+        document.getElementById('sysStatus').textContent='ANALYSIS COMPLETE';
+      }catch(err){
+        console.error(err);
+        showStatus('error','Could not complete the pipeline.<br><small style="opacity:.7">'+err.message+'</small>');
+        document.getElementById('sysStatus').textContent='CONNECTION ERROR';
+      }finally{predictBtn.disabled=false;btnIcon.textContent='âš¡';btnLabel.textContent=isVideoFile?' Analyse Frame':' Analyse Image';}
+    });
+
+    function badgeClass(level){const v=String(level||'').toLowerCase();return `model-badge ${['low','medium','high','critical'].includes(v)?v:'medium'}`;}
+    function riskColor(level){const v=String(level||'').toLowerCase();if(v==='low')return 'var(--low)';if(v==='medium')return 'var(--med)';if(v==='high')return '#ff954a';if(v==='critical')return 'var(--high)';return 'var(--accent3)';}
+
+    function updateFormationPanel(data){
+      const score=Number(data.risk_score||0),level=data.risk_level||'UNKNOWN';
+      document.getElementById('formationCard').style.display='block';
+      document.getElementById('formationRiskScore').textContent=score.toFixed(1);
+      document.getElementById('formationRiskBadge').textContent=level;
+      document.getElementById('formationRiskBadge').className=badgeClass(level);
+      document.getElementById('formationRiskFill').style.width=Math.min(score*10,100)+'%';
+      document.getElementById('formationRiskFill').style.background=riskColor(level);
+      document.getElementById('dominantFactor').textContent=data.dominant_factor||'--';
+      document.getElementById('weatherSnapshot').textContent=JSON.stringify(data.weather_snapshot||{},null,2);
+      document.getElementById('roadData').textContent=JSON.stringify(data.road_data||{},null,2);
+      updateFormationChart(data.shap_explanation||[]);
+    }
+
+    function updateFormationChart(items){
+      const cv=document.getElementById('formationShapChart');
+      if(!cv || typeof Chart==='undefined')return;
+      if(formationChart)formationChart.destroy();
+
+      const labels=items.map(item=>item.label||'Factor');
+      const values=items.map(item=>Number(item.contribution ?? item.score ?? 0));
+      const colors=values.map(value=>value>=0?'rgba(0,229,196,.75)':'rgba(255,92,92,.75)');
+      const borders=values.map(value=>value>=0?'#00e5c4':'#ff5c5c');
+
+      formationChart=new Chart(cv,{
+        type:'bar',
+        data:{
+          labels,
+          datasets:[{
+            label:'Contribution',
+            data:values,
+            backgroundColor:colors,
+            borderColor:borders,
+            borderWidth:1,
+            borderRadius:6
+          }]
+        },
+        options:{
+          indexAxis:'y',
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{legend:{display:false}},
+          scales:{
+            x:{grid:{color:'rgba(120,130,160,.15)'},ticks:{color:'#5a5f7a'}},
+            y:{grid:{display:false},ticks:{color:'#5a5f7a'}}
+          }
+        }
+      });
+    }
+
+    const criticalThresholdPlugin={
+      id:'criticalThreshold',
+      afterDraw(chart){
+        const yScale=chart.scales.y;
+        const xScale=chart.scales.x;
+        if(!yScale || !xScale)return;
+        const y=yScale.getPixelForValue(4);
+        const ctx=chart.ctx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([6,6]);
+        ctx.strokeStyle='#ff5c5c';
+        ctx.lineWidth=2;
+        ctx.moveTo(xScale.left,y);
+        ctx.lineTo(xScale.right,y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle='#ff5c5c';
+        ctx.font='11px Space Mono,monospace';
+        ctx.fillText('Critical threshold',xScale.left+8,y-8);
+        ctx.restore();
+      }
+    };
+
+    function updateDeteriorationPanel(currentSeverity,data){
+      const level=data.urgency_label||'UNKNOWN';
+      document.getElementById('deteriorationCard').style.display='block';
+      document.getElementById('urgencyBadge').textContent=`${data.urgency_emoji||''} ${level}`.trim();
+      document.getElementById('urgencyBadge').className=badgeClass(level);
+      document.getElementById('daysToCritical').textContent=data.days_to_critical==null?'Not in 90d':data.days_to_critical;
+      document.getElementById('trajectoryLabel').textContent=data.trajectory||'--';
+      document.getElementById('worsenProbability').textContent=Math.round(Number(data.worsen_probability||0)*100)+'%';
+      document.getElementById('willWorsen').textContent=data.will_worsen?'Yes':'No';
+      updateDeteriorationChart(currentSeverity,data);
+    }
+
+    function updateDeteriorationChart(currentSeverity,data){
+      const cv=document.getElementById('deteriorationChart');
+      if(!cv || typeof Chart==='undefined')return;
+      if(deteriorationChart)deteriorationChart.destroy();
+
+      deteriorationChart=new Chart(cv,{
+        type:'line',
+        data:{
+          labels:['0','30','60','90'],
+          datasets:[{
+            label:'Severity',
+            data:[
+              Number(currentSeverity||1),
+              Number(data.predicted_sev_30d),
+              Number(data.predicted_sev_60d),
+              Number(data.predicted_sev_90d)
+            ],
+            borderColor:'#00e5c4',
+            backgroundColor:'rgba(0,229,196,.12)',
+            fill:true,
+            tension:.35,
+            pointRadius:4,
+            pointHoverRadius:6
+          }]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{
+            legend:{display:false},
+            tooltip:{
+              callbacks:{
+                title:items=>items[0].label+' days',
+                label:ctx=>'Severity: '+ctx.raw
+              }
+            }
+          },
+          scales:{
+            x:{
+              title:{display:true,text:'Days',color:'#5a5f7a'},
+              grid:{color:'rgba(120,130,160,.15)'},
+              ticks:{color:'#5a5f7a'}
+            },
+            y:{
+              min:1,
+              max:5,
+              ticks:{stepSize:1,color:'#5a5f7a'},
+              title:{display:true,text:'Severity',color:'#5a5f7a'},
+              grid:{color:'rgba(120,130,160,.15)'}
+            }
+          }
+        },
+        plugins:[criticalThresholdPlugin]
+      });
+    }
+    function drawBoxes(boxes,labels,scores){
+      const ctx=boxCanvas.getContext('2d');ctx.clearRect(0,0,boxCanvas.width,boxCanvas.height);
+      const sx=boxCanvas.width/previewImg.naturalWidth,sy=boxCanvas.height/previewImg.naturalHeight;
+      boxes.forEach((box,i)=>{
+        const[x1,y1,x2,y2]=box,rx=x1*sx,ry=y1*sy,rw=(x2-x1)*sx,rh=(y2-y1)*sy;
+        ctx.shadowColor='#f5c842';ctx.shadowBlur=10;ctx.strokeStyle='#f5c842';ctx.lineWidth=2;ctx.strokeRect(rx,ry,rw,rh);ctx.shadowBlur=0;
+        ctx.fillStyle='rgba(245,200,66,.07)';ctx.fillRect(rx,ry,rw,rh);
+        const cs=10;ctx.strokeStyle='#f5c842';ctx.lineWidth=2.5;
+        [[rx,ry+cs,rx,ry,rx+cs,ry],[rx+rw-cs,ry,rx+rw,ry,rx+rw,ry+cs],[rx,ry+rh-cs,rx,ry+rh,rx+cs,ry+rh],[rx+rw-cs,ry+rh,rx+rw,ry+rh,rx+rw,ry+rh-cs]].forEach(p=>{ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[2],p[3]);ctx.lineTo(p[4],p[5]);ctx.stroke();});
+        const lbl=labels[i]||'pothole',pct=scores[i]!=null?(scores[i]*100).toFixed(1)+'%':'',tag=`${lbl}  ${pct}`;
+        ctx.font='bold 11px Space Mono,monospace';const tw=ctx.measureText(tag).width,ph=18,pp=6;
+        ctx.fillStyle='#f5c842';ctx.beginPath();ctx.roundRect(rx,ry-ph-2,tw+pp*2,ph,4);ctx.fill();
+        ctx.fillStyle='#080a0e';ctx.textBaseline='middle';ctx.fillText(tag,rx+pp,ry-ph/2-2);
+      });
+    }
+
+    function showDetectionList(labels,scores){
+      detectionsContainer.innerHTML='';
+      labels.forEach((lbl,i)=>{const conf=scores[i]!=null?(scores[i]*100).toFixed(1)+'%':'N/A';const el=document.createElement('div');el.className='detection-item';el.innerHTML=`<span class="det-name"><span class="det-idx">#${i+1}</span>${lbl}</span><span class="det-conf">${conf}</span>`;detectionsContainer.appendChild(el);});
+      resultsList.style.display='block';
+    }
+
+    function updateKPI(data,count){document.getElementById('kpiCount').textContent=count;document.getElementById('kpiPriority').textContent=data.priority_score??'—';const reach=data.analysis_details?.estimated_reach;document.getElementById('kpiReach').textContent=reach?reach.toLocaleString('en-IN'):'—';document.getElementById('kpiCost').textContent=data.estimated_cost?'₹'+Number(data.estimated_cost).toLocaleString('en-IN'):'—';document.getElementById('kpiRow').style.display='block';}
+
+    function updateRepairPanel(data){
+      const sev=data.severity||0;document.getElementById('sevNum').textContent=sev;document.getElementById('sevScore10').textContent=data.severity_score??'—';
+      const fill=document.getElementById('sevFill');fill.style.width=(sev/5*100)+'%';fill.style.background=sev<=2?'var(--low)':sev<=3?'var(--med)':'var(--high)';
+      document.getElementById('repairType').textContent=data.repair_type||'—';document.getElementById('repairCost').textContent=data.estimated_cost?'₹'+Number(data.estimated_cost).toLocaleString('en-IN'):'—';document.getElementById('repairInfer').textContent=data.inference_time_ms?data.inference_time_ms+' ms':'—';
+      const score=data.priority_score||0;let cls='low',lbl='🟢 LOW PRIORITY';if(score>=70){cls='high';lbl='🔴 HIGH PRIORITY';}else if(score>=40){cls='medium';lbl='🟡 MED PRIORITY';}
+      document.getElementById('priorityBadgeWrapper').innerHTML=`<span class="priority-pill ${cls}">${lbl}</span>`;document.getElementById('repairCard').style.display='block';
+    }
+
+    function updateRicePanel(data){
+      const ad=data.analysis_details||{};document.getElementById('riceScoreTop').textContent=data.rice_score??'—';
+      document.getElementById('riceGrid').innerHTML=[{label:'Reach',val:ad.estimated_reach?.toLocaleString('en-IN')??'—',sub:'daily users'},{label:'Impact',val:ad.estimated_impact??'—',sub:'RICE scale'},{label:'Confidence',val:ad.estimated_confidence??'—',sub:'model conf.'},{label:'Effort',val:ad.estimated_effort??'—',sub:'person-weeks'}].map(r=>`<div class="rice-item"><div class="rice-label">${r.label}</div><div class="rice-val">${r.val}</div><div class="rice-sub">${r.sub}</div></div>`).join('');
+      const sf=ad.severity_factors||{};document.getElementById('factorsGrid').innerHTML=`<div class="factor-box"><div class="factor-name">Count Factor</div><div class="factor-val" style="color:var(--accent);">${sf.count_component??'—'}</div></div><div class="factor-box"><div class="factor-name">Conf Factor</div><div class="factor-val" style="color:var(--accent3);">${sf.confidence_component??'—'}</div></div><div class="factor-box"><div class="factor-name">Area Factor</div><div class="factor-val" style="color:var(--low);">${sf.area_component??'—'}</div></div>`;
+      document.getElementById('riceCard').style.display='block';
+    }
+
+    function updateAnalysisPanel(data){
+      const ad=data.analysis_details||{},items=ad.detected_items||[];
+      document.getElementById('analysisBody').innerHTML=`<div class="panel-body"><div class="repair-row"><span class="repair-key">Source Type</span><span class="repair-val" style="color:var(--accent3);text-transform:uppercase;">${data.source_type||'image'}</span></div><div class="repair-row"><span class="repair-key">Dimensions</span><span class="repair-val">${data.image?.width??'—'} × ${data.image?.height??'—'} px</span></div>${data.frame_number!=null?`<div class="repair-row"><span class="repair-key">Frame</span><span class="repair-val">#${data.frame_number}</span></div>`:''}<div class="repair-row"><span class="repair-key">Classes Detected</span><span class="repair-val">${[...new Set(items)].join(', ')||'none'}</span></div><div class="repair-row"><span class="repair-key">RICE Score</span><span class="repair-val" style="color:var(--accent3);">${data.rice_score??'—'}</span></div><div class="repair-row" style="border-bottom:none;padding-bottom:0;"><span class="repair-key">Avg Confidence</span><span class="repair-val">${ad.estimated_confidence!=null?(ad.estimated_confidence*100).toFixed(1)+'%':'—'}</span></div></div>`;
+    }
+
+    function updateChart(data){
+      const s=data.priority_score||0;if(s>=70)chartCounts.High++;else if(s>=40)chartCounts.Medium++;else chartCounts.Low++;
+      const cv=document.getElementById('priorityChart');document.getElementById('chartPlaceholder').style.display='none';cv.style.display='block';
+      if(chartInstance){chartInstance.data.datasets[0].data=[chartCounts.High,chartCounts.Medium,chartCounts.Low];chartInstance.update();return;}
+      chartInstance=new Chart(cv,{type:'doughnut',data:{labels:['High','Medium','Low'],datasets:[{data:[chartCounts.High,chartCounts.Medium,chartCounts.Low],backgroundColor:['rgba(255,92,92,.8)','rgba(245,200,66,.8)','rgba(61,220,132,.8)'],borderColor:['#ff5c5c','#f5c842','#3ddc84'],borderWidth:2,hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#5a5f7a',font:{family:'Space Mono,monospace',size:11},padding:16,boxWidth:10,boxHeight:10,usePointStyle:true}},tooltip:{backgroundColor:'#0e1118',borderColor:'rgba(255,255,255,.08)',borderWidth:1,titleColor:'#e8eaf2',bodyColor:'#5a5f7a',titleFont:{family:'Space Mono',size:11},callbacks:{label:ctx=>`  ${ctx.label}: ${ctx.parsed} scan${ctx.parsed!==1?'s':''}`}}},cutout:'65%'}});
+    }
+
+    // ── ★ MODEL METRICS — replace with your actual results.csv values ──────────
+    const MODEL_METRICS={
+      map50:     0.883,   
+      precision: 0.861,   
+      recall:    0.810,   
+      epochs:    50,      
+      tp:810, fp:131, fn:190, tn:3420  
+    };
+    MODEL_METRICS.f1=(2*MODEL_METRICS.precision*MODEL_METRICS.recall/(MODEL_METRICS.precision+MODEL_METRICS.recall)).toFixed(3);
+
+    (function initAnalytics(){
+      const fmt=v=>(v*100).toFixed(1)+'%';
+      document.getElementById('mapVal').textContent=fmt(MODEL_METRICS.map50);
+      document.getElementById('precisionVal').textContent=fmt(MODEL_METRICS.precision);
+      document.getElementById('recallVal').textContent=fmt(MODEL_METRICS.recall);
+      document.getElementById('epochsVal').textContent=MODEL_METRICS.epochs;
+      document.getElementById('f1Val').textContent=MODEL_METRICS.f1;
+      document.getElementById('cmTP').textContent=MODEL_METRICS.tp;
+      document.getElementById('cmFP').textContent=MODEL_METRICS.fp;
+      document.getElementById('cmFN').textContent=MODEL_METRICS.fn;
+      document.getElementById('cmTN').textContent=MODEL_METRICS.tn;
+      setTimeout(()=>{
+        document.getElementById('mapBar').style.width=(MODEL_METRICS.map50*100)+'%';
+        document.getElementById('precisionBar').style.width=(MODEL_METRICS.precision*100)+'%';
+        document.getElementById('recallBar').style.width=(MODEL_METRICS.recall*100)+'%';
+      },600);
+    })();
+
+    // ── ★ MAP with Bengaluru risk zone polygons ──────────────────────────────
+    let map=null;
+    if(typeof L!=='undefined'){
+      map=L.map('map').setView([12.9716,77.5946],12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'Â© OpenStreetMap contributors',maxZoom:18}).addTo(map);
+    }
+
+    // 10 known high-risk road corridors in Bengaluru
+    const BLR_ZONES=[
+      {name:'Silk Board Junction',   risk:'High Risk',   color:'#ff5c5c', coords:[[12.916,77.619],[12.923,77.630],[12.910,77.637],[12.903,77.626]]},
+      {name:'KR Puram Bridge',       risk:'High Risk',   color:'#ff5c5c', coords:[[13.001,77.691],[13.009,77.703],[12.995,77.707],[12.987,77.695]]},
+      {name:'Domlur - Indiranagar',  risk:'High Risk',   color:'#ff5c5c', coords:[[12.969,77.636],[12.976,77.648],[12.961,77.654],[12.954,77.642]]},
+      {name:'Marathahalli Corridor', risk:'Medium Risk', color:'#f5c842', coords:[[12.951,77.694],[12.959,77.706],[12.945,77.712],[12.937,77.700]]},
+      {name:'Koramangala 5th Block', risk:'Medium Risk', color:'#f5c842', coords:[[12.929,77.619],[12.936,77.630],[12.922,77.636],[12.915,77.625]]},
+      {name:'Whitefield Main Road',  risk:'Medium Risk', color:'#f5c842', coords:[[12.970,77.746],[12.978,77.759],[12.964,77.764],[12.956,77.751]]},
+      {name:'Hebbal Flyover Area',   risk:'Medium Risk', color:'#f5c842', coords:[[13.034,77.591],[13.042,77.603],[13.027,77.608],[13.020,77.596]]},
+      {name:'Yeshwanthpur Junction', risk:'Low Risk',    color:'#3ddc84', coords:[[13.019,77.539],[13.027,77.550],[13.012,77.556],[13.004,77.545]]},
+      {name:'Rajajinagar Ext.',      risk:'Low Risk',    color:'#3ddc84', coords:[[12.993,77.554],[13.001,77.565],[12.986,77.571],[12.978,77.560]]},
+      {name:'Banashankari 2nd Stage',risk:'Low Risk',    color:'#3ddc84', coords:[[12.923,77.547],[12.931,77.558],[12.916,77.564],[12.908,77.553]]},
+    ];
+
+    if(map){
+      BLR_ZONES.forEach(z=>{
+        L.polygon(z.coords,{color:z.color,fillColor:z.color,fillOpacity:.17,weight:1.5,opacity:.6,dashArray:'5 4'})
+         .bindTooltip(`<span style="font-family:Space Mono,monospace;font-size:11px;line-height:1.8;"><b>${z.name}</b><br><span style="color:${z.color};">${z.risk}</span></span>`,{sticky:true,opacity:.97})
+         .addTo(map);
+      });
+    }
+
+    function addMapMarker(data){
+      if(!map || typeof L==='undefined')return;
+      const lat=data.lat||12.9716,lng=data.lng||77.5946,score=data.priority_score||0;
+      let color='#3ddc84';if(score>=70)color='#ff5c5c';else if(score>=40)color='#f5c842';
+      L.circleMarker([lat,lng],{radius:10,fillColor:color,color:'#080a0e',weight:2,opacity:1,fillOpacity:.9})
+       .bindPopup(`<div style="font-family:Space Mono,monospace;font-size:11px;line-height:2;color:#e8eaf2;"><b style="font-size:13px;">Pothole Detection</b><br>Severity: <b style="color:${color};">${data.severity??'—'} / 5</b><br>Priority: <b>${data.priority_score??'—'} / 100</b><br>Repair: ${data.repair_type??'—'}<br>Cost: <b style="color:#f5c842;">₹${data.estimated_cost?Number(data.estimated_cost).toLocaleString('en-IN'):'—'}</b></div>`)
+       .addTo(map);
+      map.setView([lat,lng],14);
+    }
+
+    function addLogEntry(data,count){
+      scanCount++;document.getElementById('logCount').textContent=`${scanCount} scan${scanCount!==1?'s':''}`;
+      const log=document.getElementById('scanLog'),empty=log.querySelector('.log-empty');if(empty)empty.remove();
+      const score=data.priority_score||0;let dc='var(--low)';if(score>=70)dc='var(--high)';else if(score>=40)dc='var(--med)';
+      const ts=new Date().toTimeString().slice(0,8),el=document.createElement('div');el.className='log-entry';
+      el.innerHTML=`<span class="log-time">${ts}</span><span class="log-dot" style="background:${dc};"></span><span class="log-text">${count} pothole${count!==1?'s':''} · sev ${data.severity}/5</span><span class="log-score">${score}/100</span>`;
+      log.insertBefore(el,log.firstChild);
+    }
+
+    function showStatus(type,html){statusMsg.className=type;statusMsg.innerHTML=html;statusMsg.style.display='block';}
+    function clearResultsUI(){boxCanvas.getContext('2d').clearRect(0,0,boxCanvas.width,boxCanvas.height);detectionsContainer.innerHTML='';resultsList.style.display=statusMsg.style.display='none';uploadArea.style.display='block';}
+
+    // ══════════════════════════════════════════════════════════════
+    //  THEME TOGGLE
+    // ══════════════════════════════════════════════════════════════
+    const themeToggle = document.getElementById('themeToggle');
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('pi-theme', theme);
+      themeToggle.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+    themeToggle.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      setTheme(current === 'dark' ? 'light' : 'dark');
+    });
+    // Init from saved preference
+    setTheme(localStorage.getItem('pi-theme') || 'dark');
+
+    // ══════════════════════════════════════════════════════════════
+    //  i18n — ENGLISH / KANNADA
+    // ══════════════════════════════════════════════════════════════
+    const I18N = {
+      en: {
+        systemReady:'SYSTEM READY', heroTag:'Road Intelligence System',
+        heroTitle:'Detect. Assess.<br/><em>Prioritise.</em>',
+        heroSub:'Upload road imagery for AI-powered pothole detection and repair prioritisation.',
+        panelInput:'Input', uploadTitle:'Drop road image here',
+        uploadSub:'or click to browse · JPG, PNG, WEBP, MP4, MOV · max 64 MB',
+        analyseBtn:' Analyse Image', analyseBtnVideo:' Analyse Frame', analysing:' Analysing…',
+        detections:'Detections', severityAssessment:'Severity Assessment', damageLevel:'Damage Level',
+        severityScore:'Severity Score (0–10)', minimal:'Minimal', moderate:'Moderate', critical:'Critical',
+        repairType:'Repair Type', estimatedCost:'Estimated Cost', inferenceTime:'Inference Time',
+        riceModel:'RICE Model', scanLog:'Scan Log', noScans:'No scans yet. Upload an image to begin.',
+        potholesDetected:'Potholes Detected', inThisFrame:'in this frame',
+        priorityScore:'Priority Score', outOf100:'out of 100',
+        estimatedReach:'Estimated Reach', dailyRoadUsers:'daily road users',
+        estRepairCost:'Est. Repair Cost', indianRupees:'Indian Rupees',
+        modelAnalytics:'Model Analytics · YOLOv11', trainingMetrics:'TRAINING-TIME METRICS · best.pt',
+        detectionMap:'Detection Map · Bengaluru', liveMarkers:'LIVE MARKERS + RISK ZONE OVERLAY',
+        priorityDist:'Priority Distribution', analysisDetails:'Analysis Details',
+        roadConditions:'Road Conditions', usedByDet:'USED BY DETERIORATION',
+        monthlyRainfall:'Monthly rainfall (mm)', vehiclesPerHour:'Vehicles / hour',
+        roadAge:'Road age (years)', crackIntensity:'Crack intensity',
+        drainage:'Drainage', construction:'Construction', tempRange:'Temp. range',
+        drainGood:'Good', drainAvg:'Average', drainPoor:'Poor',
+        formationAnalysis:'Formation Analysis', riskScore:'Risk Score',
+        dominantFactorLabel:'Dominant Factor', weatherSnapshot:'Weather', roadDataLabel:'Road',
+        weatherAndRoad:'Weather snapshot and road data',
+        deteriorationPred:'Deterioration Prediction', daysToCriticalLabel:'Days to Critical',
+        trajectoryLabel:'Trajectory', worsenProbLabel:'Worsen Probability', willWorsenLabel:'Will Worsen',
+        highPriority:'🔴 HIGH PRIORITY', medPriority:'🟡 MED PRIORITY', lowPriority:'🟢 LOW PRIORITY',
+        noDetected:'✓  No potholes detected.',
+        detected:(c,ms)=>`✓  ${c} pothole${c>1?'s':''} detected · ${ms} ms`,
+        backendError:'✗  Backend unreachable — is the server running on localhost:5000?',
+        inferRunning:'INFERENCE RUNNING', analysisComplete:'ANALYSIS COMPLETE', connectionError:'CONNECTION ERROR',
+        runInference:'Running YOLOv11 inference…',
+        formationModel:'FORMATION MODEL', deteriorationModel:'DETERIORATION MODEL',
+        gettingGPS:'GETTING GPS', gpsUnavailable:'Location unavailable. Using default Bengaluru coordinates for this scan...',
+        runFormation:'Running formation analysis…', runDeterioration:'Predicting 30/60/90 day deterioration…',
+        pipelineComplete:'Multi-model pipeline complete.',
+      },
+      kn: {
+        systemReady:'ವ್ಯವಸ್ಥೆ ಸಿದ್ಧ', heroTag:'ರಸ್ತೆ ಬುದ್ಧಿಮತ್ತೆ ವ್ಯವಸ್ಥೆ',
+        heroTitle:'ಪತ್ತೆ. ಮೌಲ್ಯಮಾಪನ.<br/><em>ಆದ್ಯತೆ.</em>',
+        heroSub:'AI-ಆಧಾರಿತ ಗುಂಡಿ ಪತ್ತೆ ಮತ್ತು ದುರಸ್ತಿ ಆದ್ಯತೆಗಾಗಿ ರಸ್ತೆ ಚಿತ್ರಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.',
+        panelInput:'ಇನ್‌ಪುಟ್', uploadTitle:'ರಸ್ತೆ ಚಿತ್ರವನ್ನು ಇಲ್ಲಿ ಬಿಡಿ',
+        uploadSub:'ಅಥವಾ ಬ್ರೌಸ್ ಮಾಡಲು ಕ್ಲಿಕ್ ಮಾಡಿ · JPG, PNG, WEBP, MP4, MOV · ಗರಿಷ್ಠ 64 MB',
+        analyseBtn:' ಚಿತ್ರ ವಿಶ್ಲೇಷಿಸಿ', analyseBtnVideo:' ಫ್ರೇಮ್ ವಿಶ್ಲೇಷಿಸಿ', analysing:' ವಿಶ್ಲೇಷಿಸಲಾಗುತ್ತಿದೆ…',
+        detections:'ಪತ್ತೆಗಳು', severityAssessment:'ತೀವ್ರತೆ ಮೌಲ್ಯಮಾಪನ', damageLevel:'ಹಾನಿ ಮಟ್ಟ',
+        severityScore:'ತೀವ್ರತೆ ಸ್ಕೋರ್ (0–10)', minimal:'ಕನಿಷ್ಠ', moderate:'ಮಧ್ಯಮ', critical:'ಕ್ರಿಟಿಕಲ್',
+        repairType:'ದುರಸ್ತಿ ಪ್ರಕಾರ', estimatedCost:'ಅಂದಾಜು ವೆಚ್ಚ', inferenceTime:'ಅನುಮಾನ ಸಮಯ',
+        riceModel:'RICE ಮಾದರಿ', scanLog:'ಸ್ಕ್ಯಾನ್ ಲಾಗ್', noScans:'ಇನ್ನೂ ಸ್ಕ್ಯಾನ್ ಇಲ್ಲ. ಪ್ರಾರಂಭಿಸಲು ಚಿತ್ರವನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.',
+        potholesDetected:'ಪತ್ತೆಯಾದ ಗುಂಡಿಗಳು', inThisFrame:'ಈ ಫ್ರೇಮ್‌ನಲ್ಲಿ',
+        priorityScore:'ಆದ್ಯತೆ ಸ್ಕೋರ್', outOf100:'100 ರಲ್ಲಿ',
+        estimatedReach:'ಅಂದಾಜು ತಲುಪುವಿಕೆ', dailyRoadUsers:'ದೈನಂದಿನ ರಸ್ತೆ ಬಳಕೆದಾರರು',
+        estRepairCost:'ಅಂದಾಜು ದುರಸ್ತಿ ವೆಚ್ಚ', indianRupees:'ಭಾರತೀಯ ರೂಪಾಯಿ',
+        modelAnalytics:'ಮಾದರಿ ವಿಶ್ಲೇಷಣೆ · YOLOv11', trainingMetrics:'ತರಬೇತಿ-ಸಮಯ ಮೆಟ್ರಿಕ್ಸ್ · best.pt',
+        detectionMap:'ಪತ್ತೆ ನಕ್ಷೆ · ಬೆಂಗಳೂರು', liveMarkers:'ಲೈವ್ ಮಾರ್ಕರ್ಸ್ + ಅಪಾಯ ವಲಯ',
+        priorityDist:'ಆದ್ಯತೆ ವಿತರಣೆ', analysisDetails:'ವಿಶ್ಲೇಷಣೆ ವಿವರಗಳು',
+        roadConditions:'ರಸ್ತೆ ಪರಿಸ್ಥಿತಿಗಳು', usedByDet:'ಕ್ಷೀಣತೆಯಿಂದ ಬಳಸಲಾಗುತ್ತದೆ',
+        monthlyRainfall:'ಮಾಸಿಕ ಮಳೆ (ಮಿಮೀ)', vehiclesPerHour:'ವಾಹನಗಳು / ಗಂಟೆ',
+        roadAge:'ರಸ್ತೆ ವಯಸ್ಸು (ವರ್ಷಗಳು)', crackIntensity:'ಬಿರುಕು ತೀವ್ರತೆ',
+        drainage:'ಒಳಚರಂಡಿ', construction:'ನಿರ್ಮಾಣ', tempRange:'ಉಷ್ಣಾಂಶ ವ್ಯಾಪ್ತಿ',
+        drainGood:'ಉತ್ತಮ', drainAvg:'ಸರಾಸರಿ', drainPoor:'ಕಳಪೆ',
+        formationAnalysis:'ರಚನೆ ವಿಶ್ಲೇಷಣೆ', riskScore:'ಅಪಾಯ ಸ್ಕೋರ್',
+        dominantFactorLabel:'ಪ್ರಮುಖ ಅಂಶ', weatherSnapshot:'ಹವಾಮಾನ', roadDataLabel:'ರಸ್ತೆ',
+        weatherAndRoad:'ಹವಾಮಾನ ಸ್ನ್ಯಾಪ್‌ಶಾಟ್ ಮತ್ತು ರಸ್ತೆ ಡೇಟಾ',
+        deteriorationPred:'ಕ್ಷೀಣತೆ ಮುನ್ಸೂಚನೆ', daysToCriticalLabel:'ಕ್ರಿಟಿಕಲ್‌ಗೆ ದಿನಗಳು',
+        trajectoryLabel:'ಪಥ', worsenProbLabel:'ಹದಗೆಡುವ ಸಂಭವನೀಯತೆ', willWorsenLabel:'ಹದಗೆಡುತ್ತದೆಯೇ',
+        highPriority:'🔴 ಹೆಚ್ಚಿನ ಆದ್ಯತೆ', medPriority:'🟡 ಮಧ್ಯಮ ಆದ್ಯತೆ', lowPriority:'🟢 ಕಡಿಮೆ ಆದ್ಯತೆ',
+        noDetected:'✓  ಯಾವುದೇ ಗುಂಡಿಗಳು ಪತ್ತೆಯಾಗಲಿಲ್ಲ.',
+        detected:(c,ms)=>`✓  ${c} ಗುಂಡಿ${c>1?'ಗಳು':''} ಪತ್ತೆಯಾಗಿದೆ · ${ms} ms`,
+        backendError:'✗  ಬ್ಯಾಕೆಂಡ್ ತಲುಪಲಾಗಲಿಲ್ಲ — ಸರ್ವರ್ localhost:5000 ನಲ್ಲಿ ಚಾಲನೆಯಲ್ಲಿದೆಯೇ?',
+        inferRunning:'ಅನುಮಾನ ಚಾಲನೆ', analysisComplete:'ವಿಶ್ಲೇಷಣೆ ಪೂರ್ಣ', connectionError:'ಸಂಪರ್ಕ ದೋಷ',
+        runInference:'YOLOv11 ಅನುಮಾನ ಚಾಲನೆಯಲ್ಲಿದೆ…',
+        formationModel:'ರಚನೆ ಮಾದರಿ', deteriorationModel:'ಕ್ಷೀಣತೆ ಮಾದರಿ',
+        gettingGPS:'GPS ಪಡೆಯಲಾಗುತ್ತಿದೆ', gpsUnavailable:'ಸ್ಥಳ ಲಭ್ಯವಿಲ್ಲ. ಈ ಸ್ಕ್ಯಾನ್‌ಗೆ ಡೀಫಾಲ್ಟ್ ಬೆಂಗಳೂರು ನಿರ್ದೇಶಾಂಕಗಳನ್ನು ಬಳಸಲಾಗುತ್ತಿದೆ...',
+        runFormation:'ರಚನೆ ವಿಶ್ಲೇಷಣೆ ನಡೆಸಲಾಗುತ್ತಿದೆ…', runDeterioration:'30/60/90 ದಿನಗಳ ಕ್ಷೀಣತೆ ಮುನ್ಸೂಚಿಸಲಾಗುತ್ತಿದೆ…',
+        pipelineComplete:'ಬಹು-ಮಾದರಿ ಪೈಪ್‌ಲೈನ್ ಪೂರ್ಣ.',
+      }
+    };
+
+    let currentLang = localStorage.getItem('pi-lang') || 'en';
+    const langSelect = document.getElementById('langSelect');
+
+    function applyLanguage(lang) {
+      currentLang = lang;
+      localStorage.setItem('pi-lang', lang);
+      langSelect.value = lang;
+      const strings = I18N[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (strings[key] && typeof strings[key] === 'string') {
+          el.innerHTML = strings[key];
+        }
+      });
+    }
+
+    langSelect.addEventListener('change', (e) => applyLanguage(e.target.value));
+    
+    // TWO-WAY SYNC: Listen for language changes from chatbot
+    window.addEventListener('storage', (e) => { if (e.key === 'pi-lang') applyLanguage(e.newValue); });
+    document.addEventListener('itemInserted', (e) => { if (e.key === 'pi-lang') applyLanguage(e.value); });
+
+    // Init language
+    applyLanguage(currentLang);
+    const bootStatus=document.getElementById('bootStatus');if(bootStatus)bootStatus.textContent='UI ready - fixed build';
+  </script>
+  <button id="chatLauncher" aria-label="Open Road Safety Assistant">
+    🛣️
+    <span class="chat-badge"></span>
+  </button>
+
+  <div id="chatWindow" role="dialog" aria-label="Road Safety Assistant">
+    <div class="chat-header">
+      <div class="chat-header-avatar">🛣️</div>
+      <div class="chat-header-info">
+        <div class="chat-header-name">ROADBOT · SAFETY GUIDE</div>
+        <div class="chat-header-status">Online — Road Safety Assistant</div>
+      </div>
+      <select id="chatLangSelect" class="chat-lang-select">
+        <option value="en">EN</option>
+        <option value="kn">ಕನ್ನಡ</option>
+      </select>
+      <button class="chat-close" id="chatClose" aria-label="Close chat">✕</button>
+    </div>
+    <div class="chat-chips">
+      <button class="chat-chip" data-q="How to get a pothole fixed?">🛠️ Get it Fixed</button>
+      <button class="chat-chip" data-q="How long will be the repair time?">⏱️ Repair Time</button>
+      <button class="chat-chip" data-q="Safety measures while driving on a damaged road?">🚗 Safety Tips</button>
+      <button class="chat-chip" data-q="What does repair cost?">💰 Repair Cost</button>
+      <button class="chat-chip" data-q="What is a severity score?">📊 Severity</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-bar">
+      <input type="text" id="chatInput" placeholder="Ask about road safety…" autocomplete="off" />
+      <button id="chatSend" aria-label="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CHATBOT — JS  (after HTML so getElementById works)
+  ═══════════════════════════════════════════════════════════ -->
+  <script src="chatbot/chatbot.js"></script>
+</body>
+</html>
