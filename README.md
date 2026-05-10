@@ -1,9 +1,9 @@
 # 🚧 Pothole Priority Predictor
 ### AI-Driven Road Maintenance Decision Support System
 
-An end-to-end AI-powered system that detects potholes from road images, 
-assesses severity, predicts deterioration, estimates repair costs, and 
-prioritizes maintenance using YOLOv11 and Machine Learning — built for 
+An end-to-end AI-powered system that detects potholes from road images,
+assesses severity, predicts deterioration, estimates repair costs, and
+prioritizes maintenance using YOLOv11 and Machine Learning — built for
 Indian municipal road authorities (BBMP, Bengaluru).
 
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-green)
@@ -54,17 +54,212 @@ Indian municipal road authorities (BBMP, Bengaluru).
 | Precision (Mask) | 86.34% |
 | Recall (Mask) | 81.39% |
 
-### Ground Truth Validation (5 Test Images)
-
-| Image | Detections | GT | TP | FP | FN | Precision | Recall | F1 | Avg IoU |
-|-------|-----------|----|----|----|----|-----------|--------|-----|---------|
-| t1.webp | 8 | 8 | 8 | 0 | 0 | 100% | 100% | 100% | 0.9614 |
-| t2.webp | 6 | 6 | 6 | 0 | 0 | 100% | 100% | 100% | 0.9348 |
-| t3.webp | 2 | 2 | 2 | 0 | 0 | 100% | 100% | 100% | 0.9704 |
-| t4.webp | 1 | 1 | 1 | 0 | 0 | 100% | 100% | 100% | 0.9763 |
-| t5.webp | 1 | 1 | 1 | 0 | 0 | 100% | 100% | 100% | 0.9408 |
-| **TOTAL** | **18** | **18** | **18** | **0** | **0** | **100%** | **100%** | **100%** | **~0.955** |
-
 ---
 
 ## 🔄 End-to-End Workflow
+Image Input (Street View / CCTV)
+↓
+Preprocessing (CLAHE + Gaussian)
+↓
+Detection (YOLOv11-seg)
+↓
+Severity Assessment (MiDaS DPT Hybrid) → Score 1-5
+↓
+Formation Analysis (Weather API + Traffic API)
+↓
+Deterioration Prediction (Random Forest) → 30/60/90 days
+↓
+Priority Ranking (Severity + Traffic + Formation + Deterioration)
+↓
+Repair & Cost Calculation (IRC Guidelines + Karnataka PWD SOR 2024)
+↓
+Geospatial Dashboard (Flask + Leaflet.js + Folium)
+
+---
+
+## 🧮 Key Formulas
+
+### Severity Score
+severity_score = 0.4 × area_norm
++ 0.35 × depth_term
++ 0.15 × (road_std / 255)
++ 0.10 × (depth_p95 / 100)
+
+### Priority Score
+priority_score = (Severity/5 × 60)
++ (Traffic/10 × 25)
++ (Risk/10 × 15)
++ urgency_bonus
+
+### Formation Risk
+formation_risk = 0.35 × rainfall
++ 0.30 × traffic
++ 0.20 × temperature
++ 0.15 × road_age
+
+---
+
+## 🗂️ Dataset
+
+- **Source:** Roboflow Universe
+- **Link:** https://universe.roboflow.com/major-vl1h9/pothole-bwzav/dataset/2
+- **Format:** YOLOv11 (PyTorch TXT)
+- **Task:** Object Detection + Segmentation
+- **Classes:** 1 (pothole)
+
+| Split | Images | Percentage |
+|-------|--------|------------|
+| Training | 6,819 | 70% |
+| Validation | 1,945 | 20% |
+| Test | 974 | 10% |
+| **Total** | **9,738** | **100%** |
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Detection | YOLOv11-seg (Ultralytics) |
+| Depth Estimation | MiDaS DPT Hybrid |
+| Deterioration | Random Forest Regressor |
+| Backend | Flask, Python, OpenCV |
+| Frontend | HTML, CSS, JavaScript |
+| Maps | Leaflet.js, Folium |
+| Charts | Chart.js |
+| External APIs | Weather API, Traffic API |
+| Training | Google Colab (GPU) |
+| Dataset | Roboflow Universe |
+| Version Control | GitHub |
+
+---
+
+## 🚀 How to Run
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/saniya-kousar-t/Pothole-Priority-Predictor.git
+cd Pothole-Priority-Predictor
+```
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Run the Flask App
+```bash
+python app.py
+```
+
+### 4. Open in Browser
+http://127.0.0.1:5000
+
+### 5. Run Model Directly
+```python
+from ultralytics import YOLO
+model = YOLO("best.pt")
+results = model.predict(
+    source="your_image.jpg",
+    conf=0.25,
+    save=True
+)
+```
+
+---
+
+## 📡 API Reference
+
+### POST /predict
+Upload a road image → Returns complete analysis
+
+**Response:**
+```json
+{
+  "potholes_detected": 3,
+  "severity": 4,
+  "area_sqm": 0.545,
+  "depth_score": 0.876,
+  "formation": {
+    "risk_score": 3.05,
+    "risk_level": "LOW",
+    "dominant_factor": "traffic_loading"
+  },
+  "deterioration": {
+    "sev_30d": 4.02,
+    "sev_60d": 4.04,
+    "sev_90d": 4.07,
+    "urgency": "HIGH",
+    "days_to_critical": 0
+  },
+  "priority": {
+    "score": 39.8,
+    "label": "LOW",
+    "rice_component": 19.8,
+    "formation_component": 4.6,
+    "deterioration_bonus": 15.35
+  },
+  "repair_cost_inr": 1768.2
+}
+```
+
+---
+
+## 📁 Project Structure
+Pothole-Priority-Predictor/
+│
+├── app.py                  # Flask backend
+├── best.pt                 # Trained YOLOv11 model
+├── requirements.txt        # Dependencies
+│
+├── models/
+│   ├── yolo_model.py       # YOLOv11 detection
+│   ├── severity.py         # MiDaS depth estimation
+│   ├── deterioration.py    # Random Forest prediction
+│   └── cost_estimator.py   # IRC cost calculation
+│
+├── static/
+│   ├── css/                # Stylesheets
+│   ├── js/                 # JavaScript files
+│   └── images/             # Static assets
+│
+├── templates/
+│   └── index.html          # Main dashboard
+│
+├── notebooks/
+│   ├── testandvalidation1.ipynb  # CPU validation
+│   ├── testandvalidation2.ipynb  # GPU + DAV2
+│   └── testandvalidation3.ipynb  # Roboflow training
+│
+└── README.md
+
+---
+
+## 🎯 Target Users
+
+- BBMP (Bruhat Bengaluru Mahanagara Palike)
+- Karnataka PWD Authorities
+- Municipal Road Maintenance Teams
+- Smart City Infrastructure Planners
+
+---
+
+## 📜 Standards Used
+
+- IRC:SP:72 — Road Repair Guidelines
+- Karnataka PWD SOR 2024 — Cost Rates
+- COCO Evaluation — Model Metrics
+
+---
+
+## 👥 Team
+
+- Developed as part of DSML Internship Cohort 12
+- Organization: IIMSTC, Bengaluru
+- Academic Year: 2025-26
+
+---
+
+## 📄 License
+
+MIT License — Free to use with attribution
